@@ -1,6 +1,9 @@
 name = "cloudpaste-backend"
 main = "workers.js"
-compatibility_date = "2023-05-18"
+compatibility_date = "2025-04-02"
+
+[placement]
+mode = "smart"
 
 # 环境变量
 [vars]

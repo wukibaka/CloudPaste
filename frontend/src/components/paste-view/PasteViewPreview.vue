@@ -44,12 +44,41 @@ const emit = defineEmits(["rendered"]);
 const previewElement = ref(null);
 // 跟踪内容是否已经渲染
 const contentRendered = ref(false);
+// 存储滚动位置
+const savedScrollPosition = ref({ window: 0, content: 0 });
+
+// 保存当前滚动位置
+const saveScrollPosition = () => {
+  savedScrollPosition.value = {
+    window: window.scrollY,
+    content: previewElement.value ? previewElement.value.scrollTop : 0,
+  };
+  debugLog(props.enableDebug, props.isDev, "保存滚动位置:", savedScrollPosition.value);
+};
+
+// 恢复保存的滚动位置
+const restoreScrollPosition = () => {
+  nextTick(() => {
+    // 恢复窗口滚动位置
+    window.scrollTo(0, savedScrollPosition.value.window);
+
+    // 恢复内容滚动位置（如果预览元素有滚动）
+    if (previewElement.value) {
+      previewElement.value.scrollTop = savedScrollPosition.value.content;
+    }
+
+    debugLog(props.enableDebug, props.isDev, "恢复滚动位置:", savedScrollPosition.value);
+  });
+};
 
 // 监听暗色模式变化，当主题改变时重新渲染内容
 watch(
     () => props.darkMode,
     () => {
       if (props.content) {
+        // 在重新渲染前保存滚动位置
+        saveScrollPosition();
+
         // 暗色模式变化时重新渲染
         nextTick(() => {
           renderContent(props.content);
@@ -115,7 +144,7 @@ const renderContentInternal = (content) => {
           theme: {
             current: props.darkMode ? "dark" : "light", // 根据darkMode设置主题
           },
-          cdn: "https://cdn.jsdelivr.net/npm/vditor@3.11.0", // 添加CDN配置，确保资源正确加载
+          cdn: "https://fastly.jsdelivr.net/npm/vditor@3.11.0", // 添加CDN配置，确保资源正确加载
           hljs: {
             lineNumber: true, // 代码块显示行号
             style: props.darkMode ? "vs2015" : "github", // 代码高亮样式
@@ -165,6 +194,12 @@ const renderContentInternal = (content) => {
 
             // 添加任务列表的交互功能
             const setupTaskListInteraction = () => {
+              // 添加非空检查，如果预览元素不存在则直接返回
+              if (!previewElement.value) {
+                console.warn("setupTaskListInteraction: 预览元素不存在，跳过任务列表交互设置");
+                return;
+              }
+
               // 根据用户反馈，使用已知有效的选择器
               const checkboxes = previewElement.value.querySelectorAll('.vditor-task input[type="checkbox"]');
 
@@ -203,10 +238,14 @@ const renderContentInternal = (content) => {
             });
 
             // 监听DOM变化
-            observer.observe(previewElement.value, {
-              childList: true,
-              subtree: true,
-            });
+            if (previewElement.value) {
+              observer.observe(previewElement.value, {
+                childList: true,
+                subtree: true,
+              });
+            } else {
+              console.warn("无法设置MutationObserver：预览元素不存在");
+            }
 
             // 添加代码块折叠功能
             setupCodeBlockCollapse();
@@ -266,6 +305,9 @@ const renderContentInternal = (content) => {
             // 标记内容已渲染，并触发渲染完成事件
             contentRendered.value = true;
             emit("rendered");
+
+            // 恢复滚动位置
+            restoreScrollPosition();
           },
         });
       }, 10); // 短延迟，确保DOM更新
@@ -279,6 +321,9 @@ const renderContentInternal = (content) => {
         // 即使是回退渲染，也标记为已渲染
         contentRendered.value = true;
         emit("rendered");
+
+        // 恢复滚动位置
+        restoreScrollPosition();
       }
     }
   } else {

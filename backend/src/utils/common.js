@@ -92,6 +92,14 @@ export function processWeeklyData(data) {
 }
 
 /**
+ * 生成通用UUID
+ * @returns {string} 生成的UUID，符合RFC4122 v4标准
+ */
+export function generateUUID() {
+  return crypto.randomUUID();
+}
+
+/**
  * 生成唯一文件ID
  * @returns {string} 生成的文件ID
  */
@@ -153,6 +161,6 @@ export function getFileNameAndExt(filename) {
  */
 export function getSafeFileName(fileName) {
   return fileName
-      .replace(/[^\w\u4e00-\u9fa5\-\.]/g, "_") // 仅保留字母、数字、中文、下划线、连字符和点
-      .replace(/_{2,}/g, "_"); // 将多个连续下划线替换为单个
+    .replace(/[^\w\u4e00-\u9fa5\-\.]/g, "_") // 仅保留字母、数字、中文、下划线、连字符和点
+    .replace(/_{2,}/g, "_"); // 将多个连续下划线替换为单个
 }

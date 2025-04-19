@@ -209,9 +209,9 @@ onBeforeUnmount(() => {
   <div class="outline-grid-container flex flex-col md:flex-row select-none outline-container-height" :class="{ dragging: isDragging }">
     <!-- 大纲区域 - 在手机端默认收起 -->
     <div
-        class="outline-panel md:p-4 border-b md:border-b-0 md:border-r overflow-hidden flex flex-col transition-all duration-300"
-        :class="[darkMode ? 'border-gray-700 bg-gray-900' : 'border-gray-200 bg-gray-50', isMobile ? (isOutlineExpanded ? 'h-[300px]' : 'h-[48px]') : 'h-full']"
-        :style="!isMobile ? leftPanelStyle : {}"
+      class="outline-panel md:p-4 border-b md:border-b-0 md:border-r overflow-hidden flex flex-col transition-all duration-300"
+      :class="[darkMode ? 'border-gray-700 bg-gray-900' : 'border-gray-200 bg-gray-50', isMobile ? (isOutlineExpanded ? 'h-[300px]' : 'h-[48px]') : 'h-full']"
+      :style="!isMobile ? leftPanelStyle : {}"
     >
       <!-- 大纲标题栏 - 在手机端可点击展开/收起 -->
       <div class="flex items-center justify-between p-3 md:p-0 md:mb-4 cursor-pointer md:cursor-default" @click="toggleOutlineOnMobile">
@@ -237,10 +237,10 @@ onBeforeUnmount(() => {
             <div class="flex items-center cursor-pointer rounded hover:bg-gray-200 dark:hover:bg-gray-700 py-1.5 px-2 transition-colors" @click="scrollToHeading(item.id)">
               <!-- 展开/折叠按钮 -->
               <button
-                  v-if="item.children && item.children.length > 0"
-                  @click.stop="toggleOutlineItem(item, $event)"
-                  class="mr-1 w-5 h-5 flex items-center justify-center text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
-                  aria-label="展开或折叠子项"
+                v-if="item.children && item.children.length > 0"
+                @click.stop="toggleOutlineItem(item, $event)"
+                class="mr-1 w-5 h-5 flex items-center justify-center text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+                aria-label="展开或折叠子项"
               >
                 <span v-if="item.expanded">▼</span>
                 <span v-else>▶</span>
@@ -249,8 +249,8 @@ onBeforeUnmount(() => {
 
               <!-- 标题文本 - 样式根据标题级别不同而不同 -->
               <span class="block truncate" :class="[item.level === 1 ? 'font-bold' : '', item.level === 2 ? 'font-semibold' : '', darkMode ? 'text-gray-200' : 'text-gray-800']">{{
-                  item.text
-                }}</span>
+                item.text
+              }}</span>
             </div>
 
             <!-- 第二层 - 子标题列表 -->
@@ -258,10 +258,10 @@ onBeforeUnmount(() => {
               <li v-for="(child, childIndex) in item.children" :key="`${index}-${childIndex}`" class="outline-item">
                 <div class="flex items-center cursor-pointer rounded hover:bg-gray-200 dark:hover:bg-gray-700 py-1.5 px-2 transition-colors" @click="scrollToHeading(child.id)">
                   <button
-                      v-if="child.children && child.children.length > 0"
-                      @click.stop="toggleOutlineItem(child, $event)"
-                      class="mr-1 w-5 h-5 flex items-center justify-center text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
-                      aria-label="展开或折叠子项"
+                    v-if="child.children && child.children.length > 0"
+                    @click.stop="toggleOutlineItem(child, $event)"
+                    class="mr-1 w-5 h-5 flex items-center justify-center text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+                    aria-label="展开或折叠子项"
                   >
                     <span v-if="child.expanded">▼</span>
                     <span v-else>▶</span>
@@ -269,9 +269,9 @@ onBeforeUnmount(() => {
                   <span v-else class="w-5"></span>
 
                   <span
-                      class="block truncate"
-                      :class="[child.level === 1 ? 'font-bold' : '', child.level === 2 ? 'font-semibold' : '', darkMode ? 'text-gray-200' : 'text-gray-800']"
-                  >{{ child.text }}</span
+                    class="block truncate"
+                    :class="[child.level === 1 ? 'font-bold' : '', child.level === 2 ? 'font-semibold' : '', darkMode ? 'text-gray-200' : 'text-gray-800']"
+                    >{{ child.text }}</span
                   >
                 </div>
 
@@ -279,14 +279,14 @@ onBeforeUnmount(() => {
                 <ul v-if="child.children && child.children.length > 0 && child.expanded" class="pl-4 space-y-1 mt-1">
                   <li v-for="(grandChild, grandChildIndex) in child.children" :key="`${index}-${childIndex}-${grandChildIndex}`" class="outline-item">
                     <div
-                        class="flex items-center cursor-pointer rounded hover:bg-gray-200 dark:hover:bg-gray-700 py-1.5 px-2 transition-colors"
-                        @click="scrollToHeading(grandChild.id)"
+                      class="flex items-center cursor-pointer rounded hover:bg-gray-200 dark:hover:bg-gray-700 py-1.5 px-2 transition-colors"
+                      @click="scrollToHeading(grandChild.id)"
                     >
                       <button
-                          v-if="grandChild.children && grandChild.children.length > 0"
-                          @click.stop="toggleOutlineItem(grandChild, $event)"
-                          class="mr-1 w-5 h-5 flex items-center justify-center text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
-                          aria-label="展开或折叠子项"
+                        v-if="grandChild.children && grandChild.children.length > 0"
+                        @click.stop="toggleOutlineItem(grandChild, $event)"
+                        class="mr-1 w-5 h-5 flex items-center justify-center text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+                        aria-label="展开或折叠子项"
                       >
                         <span v-if="grandChild.expanded">▼</span>
                         <span v-else>▶</span>
@@ -294,28 +294,28 @@ onBeforeUnmount(() => {
                       <span v-else class="w-5"></span>
 
                       <span
-                          class="block truncate"
-                          :class="[grandChild.level === 1 ? 'font-bold' : '', grandChild.level === 2 ? 'font-semibold' : '', darkMode ? 'text-gray-200' : 'text-gray-800']"
-                      >{{ grandChild.text }}</span
+                        class="block truncate"
+                        :class="[grandChild.level === 1 ? 'font-bold' : '', grandChild.level === 2 ? 'font-semibold' : '', darkMode ? 'text-gray-200' : 'text-gray-800']"
+                        >{{ grandChild.text }}</span
                       >
                     </div>
 
                     <!-- 第四层 -->
                     <ul v-if="grandChild.children && grandChild.children.length > 0 && grandChild.expanded" class="pl-4 space-y-1 mt-1">
                       <li
-                          v-for="(greatGrandChild, greatGrandChildIndex) in grandChild.children"
-                          :key="`${index}-${childIndex}-${grandChildIndex}-${greatGrandChildIndex}`"
-                          class="outline-item"
+                        v-for="(greatGrandChild, greatGrandChildIndex) in grandChild.children"
+                        :key="`${index}-${childIndex}-${grandChildIndex}-${greatGrandChildIndex}`"
+                        class="outline-item"
                       >
                         <div
-                            class="flex items-center cursor-pointer rounded hover:bg-gray-200 dark:hover:bg-gray-700 py-1.5 px-2 transition-colors"
-                            @click="scrollToHeading(greatGrandChild.id)"
+                          class="flex items-center cursor-pointer rounded hover:bg-gray-200 dark:hover:bg-gray-700 py-1.5 px-2 transition-colors"
+                          @click="scrollToHeading(greatGrandChild.id)"
                         >
                           <button
-                              v-if="greatGrandChild.children && greatGrandChild.children.length > 0"
-                              @click.stop="toggleOutlineItem(greatGrandChild, $event)"
-                              class="mr-1 w-5 h-5 flex items-center justify-center text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
-                              aria-label="展开或折叠子项"
+                            v-if="greatGrandChild.children && greatGrandChild.children.length > 0"
+                            @click.stop="toggleOutlineItem(greatGrandChild, $event)"
+                            class="mr-1 w-5 h-5 flex items-center justify-center text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+                            aria-label="展开或折叠子项"
                           >
                             <span v-if="greatGrandChild.expanded">▼</span>
                             <span v-else>▶</span>
@@ -323,32 +323,32 @@ onBeforeUnmount(() => {
                           <span v-else class="w-5"></span>
 
                           <span
-                              class="block truncate"
-                              :class="[
+                            class="block truncate"
+                            :class="[
                               greatGrandChild.level === 1 ? 'font-bold' : '',
                               greatGrandChild.level === 2 ? 'font-semibold' : '',
                               darkMode ? 'text-gray-200' : 'text-gray-800',
                             ]"
-                          >{{ greatGrandChild.text }}</span
+                            >{{ greatGrandChild.text }}</span
                           >
                         </div>
 
                         <!-- 第五层 -->
                         <ul v-if="greatGrandChild.children && greatGrandChild.children.length > 0 && greatGrandChild.expanded" class="pl-4 space-y-1 mt-1">
                           <li
-                              v-for="(lvl5Child, lvl5Index) in greatGrandChild.children"
-                              :key="`${index}-${childIndex}-${grandChildIndex}-${greatGrandChildIndex}-${lvl5Index}`"
-                              class="outline-item"
+                            v-for="(lvl5Child, lvl5Index) in greatGrandChild.children"
+                            :key="`${index}-${childIndex}-${grandChildIndex}-${greatGrandChildIndex}-${lvl5Index}`"
+                            class="outline-item"
                           >
                             <div
-                                class="flex items-center cursor-pointer rounded hover:bg-gray-200 dark:hover:bg-gray-700 py-1.5 px-2 transition-colors"
-                                @click="scrollToHeading(lvl5Child.id)"
+                              class="flex items-center cursor-pointer rounded hover:bg-gray-200 dark:hover:bg-gray-700 py-1.5 px-2 transition-colors"
+                              @click="scrollToHeading(lvl5Child.id)"
                             >
                               <button
-                                  v-if="lvl5Child.children && lvl5Child.children.length > 0"
-                                  @click.stop="toggleOutlineItem(lvl5Child, $event)"
-                                  class="mr-1 w-5 h-5 flex items-center justify-center text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
-                                  aria-label="展开或折叠子项"
+                                v-if="lvl5Child.children && lvl5Child.children.length > 0"
+                                @click.stop="toggleOutlineItem(lvl5Child, $event)"
+                                class="mr-1 w-5 h-5 flex items-center justify-center text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+                                aria-label="展开或折叠子项"
                               >
                                 <span v-if="lvl5Child.expanded">▼</span>
                                 <span v-else>▶</span>
@@ -361,13 +361,13 @@ onBeforeUnmount(() => {
                             <!-- 第六层 - 最后一层，不再提供折叠功能 -->
                             <ul v-if="lvl5Child.children && lvl5Child.children.length > 0 && lvl5Child.expanded" class="pl-4 space-y-1 mt-1">
                               <li
-                                  v-for="(lvl6Child, lvl6Index) in lvl5Child.children"
-                                  :key="`${index}-${childIndex}-${grandChildIndex}-${greatGrandChildIndex}-${lvl5Index}-${lvl6Index}`"
-                                  class="outline-item"
+                                v-for="(lvl6Child, lvl6Index) in lvl5Child.children"
+                                :key="`${index}-${childIndex}-${grandChildIndex}-${greatGrandChildIndex}-${lvl5Index}-${lvl6Index}`"
+                                class="outline-item"
                               >
                                 <div
-                                    class="flex items-center cursor-pointer rounded hover:bg-gray-200 dark:hover:bg-gray-700 py-1.5 px-2 transition-colors"
-                                    @click="scrollToHeading(lvl6Child.id)"
+                                  class="flex items-center cursor-pointer rounded hover:bg-gray-200 dark:hover:bg-gray-700 py-1.5 px-2 transition-colors"
+                                  @click="scrollToHeading(lvl6Child.id)"
                                 >
                                   <span class="w-5"></span>
                                   <span class="block truncate" :class="[darkMode ? 'text-gray-400' : 'text-gray-600']">{{ lvl6Child.text }}</span>
@@ -392,9 +392,9 @@ onBeforeUnmount(() => {
 
     <!-- 右侧内容区域 - 使用slot接收实际内容 -->
     <div
-        class="content-panel h-full md:relative flex-grow flex flex-col overflow-hidden"
-        :class="[isMobile ? 'w-full' : '', isOutlineExpanded ? 'h-[calc(100%-300px)] md:h-full' : 'h-[calc(100%-48px)] md:h-full', isDragging ? 'dragging' : '']"
-        :style="isMobile ? {} : rightPanelStyle"
+      class="content-panel h-full md:relative flex-grow flex flex-col overflow-hidden"
+      :class="[isMobile ? 'w-full' : '', isOutlineExpanded ? 'h-[calc(100%-300px)] md:h-full' : 'h-[calc(100%-48px)] md:h-full', isDragging ? 'dragging' : '']"
+      :style="isMobile ? {} : rightPanelStyle"
     >
       <!-- 内容区域，使用slot允许父组件插入具体内容 -->
       <slot name="content"></slot>

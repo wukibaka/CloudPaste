@@ -322,16 +322,21 @@ export async function directUploadFile(file, options, onProgress, onXhrReady, on
     if (fileId) {
       console.log("上传失败，正在删除文件记录:", fileId);
       try {
+        // 检查是否存在管理员令牌或API密钥
+        const hasAdminToken = localStorage.getItem("admin_token");
+        const hasApiKey = localStorage.getItem("api_key");
+
         // 根据用户身份选择合适的删除API
-        // 这里我们需要判断用户是管理员还是普通用户，但在当前函数中我们没有这个信息
-        // 因此我们尝试两种删除方法，如果一个失败就尝试另一个
-        try {
+        if (hasAdminToken) {
+          // 使用管理员API删除文件
           await deleteFile(fileId);
           console.log("已成功删除上传失败的文件记录（管理员API）");
-        } catch (deleteError) {
-          // 如果管理员API失败，尝试用户API
+        } else if (hasApiKey) {
+          // 使用用户API删除文件
           await deleteUserFile(fileId);
           console.log("已成功删除上传失败的文件记录（用户API）");
+        } else {
+          console.warn("未检测到有效的管理员令牌或API密钥，无法删除文件记录");
         }
       } catch (deleteError) {
         console.error("删除上传失败的文件记录错误:", deleteError);

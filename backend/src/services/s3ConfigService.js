@@ -175,7 +175,7 @@ export async function createS3Config(db, configData, adminId, encryptionSecret) 
     ) VALUES (
       ?, ?, ?, ?, ?, 
       ?, ?, ?, ?, 
-      ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+      ?, ?, ?, ?, ?, ?
     )
   `
       )
@@ -192,7 +192,9 @@ export async function createS3Config(db, configData, adminId, encryptionSecret) 
           defaultFolder,
           isPublic,
           adminId,
-          totalStorageBytes
+          totalStorageBytes,
+          getLocalTimeString(),
+          getLocalTimeString()
       )
       .run();
 
@@ -718,6 +720,7 @@ export async function testS3Connection(db, id, adminId, encryptionSecret, reques
       method: "PUT",
       headers: uploadHeaders,
       body: testContent,
+      duplex: "half",
     });
     const uploadEndTime = performance.now();
 

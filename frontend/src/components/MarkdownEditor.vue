@@ -422,7 +422,7 @@ const initEditor = () => {
     theme: theme,
     // JS 文件使用 CDN，CSS 文件使用本地
     // 如后续需要升级Vditor版本，需要同时更新预览页中的CDN版本号
-    cdn: "https://cdn.jsdelivr.net/npm/vditor@3.11.0",
+    cdn: "https://fastly.jsdelivr.net/npm/vditor@3.11.0",
     resize: {
       enable: true,
       position: "bottom", // 只允许底部拖动
@@ -442,7 +442,7 @@ const initEditor = () => {
         lineNumber: true, // 显示行号
         style: props.darkMode ? "vs2015" : "github",
         // ：JS 文件使用 CDN，CSS 文件使用本地
-        js: "https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.7.0/build/highlight.min.js",
+        js: "https://fastly.jsdelivr.net/gh/highlightjs/cdn-release@11.7.0/build/highlight.min.js",
         css: (style) => `/assets/vditor/dist/js/highlight.js/styles/${style}.min.css`,
       },
       actions: ["desktop", "tablet", "mobile", "mp-wechat", "zhihu"],
@@ -628,6 +628,17 @@ const initEditor = () => {
       "undo",
       "redo",
       "|",
+      {
+        name: "clear-content",
+        icon: '<svg viewBox="0 0 24 24" width="16" height="16" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19Z"></path></svg>',
+        tip: "清空内容",
+        click() {
+          // 添加确认对话框
+          if (confirm(t("markdown.confirmClearContent") || "确定要清空所有内容吗？")) {
+            clearEditorContent();
+          }
+        },
+      },
       {
         name: "copy-formats",
         icon: '<svg viewBox="0 0 24 24" width="16" height="16" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M19,21H8V7H19M19,5H8A2,2 0 0,0 6,7V21A2,2 0 0,0 8,23H19A2,2 0 0,0 21,21V7A2,2 0 0,0 19,5M16,1H4A2,2 0 0,0 2,3V17H4V3H16V1Z"></path></svg>',
@@ -1478,6 +1489,20 @@ const exportAsPng = async () => {
       savingStatus.value = "";
     }, 3000);
   }
+};
+
+// 在script setup部分，添加一个清除内容的函数
+const clearEditorContent = () => {
+  if (!editor) return;
+
+  // 清空编辑器内容
+  editor.setValue("");
+
+  // 显示提示信息
+  savingStatus.value = t("markdown.contentCleared") || "内容已清空";
+  setTimeout(() => {
+    savingStatus.value = "";
+  }, 2000);
 };
 </script>
 

@@ -45,6 +45,9 @@ export async function createS3Client(config, encryptionSecret) {
       clientConfig.customUserAgent = "CloudPaste/1.0";
       clientConfig.requestTimeout = 60000;
       maxRetries = 4;
+      // 禁用 B2 不支持的校验和功能
+      clientConfig.requestChecksumCalculation = "WHEN_REQUIRED";
+      clientConfig.responseChecksumValidation = "WHEN_REQUIRED";
       break;
 
     case S3ProviderTypes.R2:
@@ -69,9 +72,9 @@ export async function createS3Client(config, encryptionSecret) {
 
   // 日志记录所选服务商和配置
   console.log(
-      `正在创建S3客户端 (${config.provider_type}), endpoint: ${config.endpoint_url}, region: ${config.region || "auto"}, pathStyle: ${
-          config.path_style ? "是" : "否"
-      }, maxRetries: ${maxRetries}`
+    `正在创建S3客户端 (${config.provider_type}), endpoint: ${config.endpoint_url}, region: ${config.region || "auto"}, pathStyle: ${
+      config.path_style ? "是" : "否"
+    }, maxRetries: ${maxRetries}`
   );
 
   // 返回创建的S3客户端

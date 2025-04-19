@@ -15,13 +15,13 @@ export async function validateAdminToken(db, token) {
   try {
     // 查询令牌是否存在并且未过期
     const result = await db
-        .prepare(
-            `SELECT admin_id, expires_at 
+      .prepare(
+        `SELECT admin_id, expires_at 
          FROM ${DbTables.ADMIN_TOKENS} 
          WHERE token = ?`
-        )
-        .bind(token)
-        .first();
+      )
+      .bind(token)
+      .first();
 
     if (!result) {
       console.log("令牌不存在");
@@ -79,14 +79,14 @@ export async function login(db, username, password) {
   expiresAt.setDate(expiresAt.getDate() + 1); // 1天过期
 
   await db
-      .prepare(
-          `
+    .prepare(
+      `
     INSERT INTO ${DbTables.ADMIN_TOKENS} (token, admin_id, expires_at)
     VALUES (?, ?, ?)
   `
-      )
-      .bind(token, admin.id, expiresAt.toISOString())
-      .run();
+    )
+    .bind(token, admin.id, expiresAt.toISOString())
+    .run();
 
   // 返回认证信息
   return {
@@ -141,28 +141,28 @@ export async function changePassword(db, adminId, currentPassword, newPassword, 
     const newPasswordHash = newPassword ? await hashPassword(newPassword) : admin.password;
 
     await db
-        .prepare(
-            `
+      .prepare(
+        `
       UPDATE ${DbTables.ADMINS} 
       SET username = ?, password = ?, updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `
-        )
-        .bind(newUsername, newPasswordHash, adminId)
-        .run();
+      )
+      .bind(newUsername, newPasswordHash, adminId)
+      .run();
   } else if (newPassword) {
     // 仅更新密码
     const newPasswordHash = await hashPassword(newPassword);
     await db
-        .prepare(
-            `
+      .prepare(
+        `
       UPDATE ${DbTables.ADMINS} 
       SET password = ?, updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `
-        )
-        .bind(newPasswordHash, adminId)
-        .run();
+      )
+      .bind(newPasswordHash, adminId)
+      .run();
   } else {
     throw new HTTPException(ApiStatus.BAD_REQUEST, { message: "未提供新密码或新用户名" });
   }

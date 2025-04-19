@@ -354,7 +354,7 @@ userPasteRoutes.delete("/api/user/pastes/:id", apiKeyTextMiddleware, async (c) =
 });
 
 // API密钥用户批量删除自己的文本
-userPasteRoutes.delete("/api/user/pastes", apiKeyTextMiddleware, async (c) => {
+userPasteRoutes.post("/api/user/pastes/batch-delete", apiKeyTextMiddleware, async (c) => {
   const db = c.env.DB;
   const apiKeyId = c.get("apiKeyId");
 

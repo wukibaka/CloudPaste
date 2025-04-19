@@ -61,10 +61,14 @@ export async function fetchApi(endpoint, options = {}) {
 
   console.log(`🚀 API请求: ${debugInfo.method} ${debugInfo.url}`, debugInfo);
 
+  // 检查请求体是否为FormData类型
+  const isFormData = options.body instanceof FormData;
+
   // 默认请求选项
   const defaultOptions = {
     headers: {
-      "Content-Type": "application/json",
+      // 如果是FormData，不设置默认的Content-Type，让浏览器自动处理
+      ...(isFormData ? {} : { "Content-Type": "application/json" }),
     },
     // 不再使用credentials: 'include'，因为我们使用Bearer token认证
   };
@@ -79,8 +83,8 @@ export async function fetchApi(endpoint, options = {}) {
     }),
   };
 
-  // 如果请求体是对象类型，则自动序列化为JSON
-  if (requestOptions.body && typeof requestOptions.body === "object") {
+  // 如果请求体是对象类型但不是FormData，则自动序列化为JSON
+  if (requestOptions.body && typeof requestOptions.body === "object" && !isFormData) {
     requestOptions.body = JSON.stringify(requestOptions.body);
   }
 
@@ -230,10 +234,158 @@ export function get(endpoint, options = {}) {
 }
 
 /**
- * POST请求方法
+ * 发送POST请求
+ * @param {string} endpoint - API端点
+ * @param {Object|ArrayBuffer|Blob} data - 请求数据
+ * @param {Object} options - 可选配置
+ * @returns {Promise<Object>} 响应数据
  */
-export function post(endpoint, data, options = {}) {
-  return fetchApi(endpoint, { ...options, method: "POST", body: data });
+export async function post(endpoint, data, options = {}) {
+  try {
+    const url = getFullApiUrl(endpoint);
+    const headers = {
+      ...addAuthToken({}),
+      ...options.headers,
+    };
+
+    // 检查是否需要发送原始二进制数据（用于分片上传）
+    if (options.rawBody && (data instanceof ArrayBuffer || data instanceof Blob)) {
+      // 提取分片信息（如果存在）
+      let partInfo = "";
+      const partNumberMatch = endpoint.match(/partNumber=(\d+)/);
+      const isLastPartMatch = endpoint.match(/isLastPart=(true|false)/);
+
+      if (partNumberMatch) {
+        const partNumber = partNumberMatch[1];
+        const isLastPart = isLastPartMatch ? isLastPartMatch[1] === "true" : false;
+        partInfo = `，分片: ${partNumber}${isLastPart ? " (最后分片)" : ""}`;
+      }
+
+      console.log(`发送二进制数据到 ${url}${partInfo}，大小: ${data instanceof Blob ? data.size : data.byteLength} 字节`);
+
+      // 添加对 XHR 对象的处理，以支持取消功能
+      const xhr = new XMLHttpRequest();
+
+      // 如果提供了 XHR 创建回调，调用它以支持取消操作
+      if (options.onXhrCreated && typeof options.onXhrCreated === "function") {
+        options.onXhrCreated(xhr);
+      }
+
+      // 返回一个基于 XHR 的 Promise
+      return new Promise((resolve, reject) => {
+        xhr.open("POST", url, true);
+
+        // 设置请求头
+        Object.keys(headers).forEach((key) => {
+          xhr.setRequestHeader(key, headers[key]);
+        });
+
+        // 设置超时
+        if (options.timeout) {
+          xhr.timeout = options.timeout;
+        }
+
+        // 设置响应类型为 JSON
+        xhr.responseType = "json";
+
+        // 监听上传进度
+        if (options.onUploadProgress && typeof options.onUploadProgress === "function") {
+          xhr.upload.onprogress = (event) => {
+            if (event.lengthComputable) {
+              options.onUploadProgress(Math.round((event.loaded / event.total) * 100));
+            }
+          };
+        }
+
+        // 监听请求完成
+        xhr.onload = function () {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            let responseData;
+
+            // 尝试解析响应
+            try {
+              if (xhr.response) {
+                responseData = xhr.response;
+              } else if (xhr.responseType === "" || xhr.responseType === "text") {
+                // 如果响应类型为文本，尝试解析为 JSON
+                try {
+                  responseData = JSON.parse(xhr.responseText);
+                } catch (e) {
+                  responseData = xhr.responseText;
+                }
+              } else {
+                responseData = xhr.response;
+              }
+
+              console.log(`✅ 二进制上传请求成功 ${url}${partInfo}`);
+              resolve(responseData);
+            } catch (e) {
+              console.error(`解析响应错误: ${e.message}`);
+              reject(new Error(`解析响应错误: ${e.message}`));
+            }
+          } else {
+            let errorMsg;
+            try {
+              if (xhr.responseType === "" || xhr.responseType === "text") {
+                try {
+                  const errorObj = JSON.parse(xhr.responseText);
+                  errorMsg = errorObj.message || `HTTP错误 ${xhr.status}`;
+                } catch (e) {
+                  errorMsg = xhr.responseText || `HTTP错误 ${xhr.status}`;
+                }
+              } else if (xhr.response && xhr.response.message) {
+                errorMsg = xhr.response.message;
+              } else {
+                errorMsg = `HTTP错误 ${xhr.status}`;
+              }
+            } catch (e) {
+              errorMsg = `HTTP错误 ${xhr.status}`;
+            }
+
+            console.error(`❌ 二进制上传请求失败 ${url}${partInfo}: ${errorMsg}`);
+            reject(new Error(errorMsg));
+          }
+        };
+
+        // 监听网络错误
+        xhr.onerror = function () {
+          console.error(`❌ 网络错误: ${url}${partInfo}`);
+          reject(new Error("网络错误，请检查连接"));
+        };
+
+        // 监听超时
+        xhr.ontimeout = function () {
+          console.error(`❌ 请求超时: ${url}${partInfo}`);
+          reject(new Error("请求超时，服务器响应时间过长"));
+        };
+
+        // 监听中止
+        xhr.onabort = function () {
+          console.log(`⏹️ 请求已被中止: ${url}${partInfo}`);
+          reject(new Error("请求已被用户取消"));
+        };
+
+        // 发送请求
+        xhr.send(data);
+      });
+    }
+
+    // 常规JSON数据或FormData
+    if (!headers["Content-Type"] && !(data instanceof FormData)) {
+      headers["Content-Type"] = "application/json";
+    }
+
+    // 使用封装的fetchApi处理请求
+    return await fetchApi(endpoint, {
+      ...options,
+      method: "POST",
+      headers,
+      body: data,
+    });
+  } catch (error) {
+    console.error(`POST ${endpoint} 请求错误:`, error);
+    throw error;
+  }
 }
 
 /**

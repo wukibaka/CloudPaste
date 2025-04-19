@@ -143,6 +143,10 @@ export async function createPaste(db, pasteData, createdBy) {
     passwordHash = await hashPassword(pasteData.password);
   }
 
+  // 创建时间
+  const now = new Date();
+  const createdAt = now.toISOString();
+
   // 插入数据库
   await db
       .prepare(
@@ -150,10 +154,10 @@ export async function createPaste(db, pasteData, createdBy) {
     INSERT INTO ${DbTables.PASTES} (
       id, slug, content, remark, password, 
       expires_at, max_views, created_by, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `
       )
-      .bind(pasteId, slug, pasteData.content, pasteData.remark || null, passwordHash, pasteData.expiresAt || null, pasteData.maxViews || null, createdBy)
+      .bind(pasteId, slug, pasteData.content, pasteData.remark || null, passwordHash, pasteData.expiresAt || null, pasteData.maxViews || null, createdBy, createdAt, createdAt)
       .run();
 
   // 如果设置了密码，将明文密码存入paste_passwords表
@@ -178,7 +182,7 @@ export async function createPaste(db, pasteData, createdBy) {
     expiresAt: pasteData.expiresAt,
     maxViews: pasteData.maxViews,
     hasPassword: !!passwordHash,
-    createdAt: new Date().toISOString(),
+    createdAt: createdAt,
   };
 }
 

@@ -56,13 +56,13 @@ s3ConfigRoutes.get("/api/s3-configs", async (c) => {
       const apiKey = authHeader.substring(7);
       // 查询API密钥和权限
       const keyRecord = await db
-          .prepare(
-              `SELECT id, name, file_permission, expires_at 
+        .prepare(
+          `SELECT id, name, file_permission, expires_at 
            FROM ${DbTables.API_KEYS} 
            WHERE key = ?`
-          )
-          .bind(apiKey)
-          .first();
+        )
+        .bind(apiKey)
+        .first();
 
       if (keyRecord && keyRecord.file_permission === 1) {
         // 检查是否过期
@@ -71,13 +71,13 @@ s3ConfigRoutes.get("/api/s3-configs", async (c) => {
 
           // 更新最后使用时间
           await db
-              .prepare(
-                  `UPDATE ${DbTables.API_KEYS}
+            .prepare(
+              `UPDATE ${DbTables.API_KEYS}
                SET last_used = ?
                WHERE id = ?`
-              )
-              .bind(getLocalTimeString(), keyRecord.id)
-              .run();
+            )
+            .bind(getLocalTimeString(), keyRecord.id)
+            .run();
         }
       }
     } catch (error) {
@@ -142,13 +142,13 @@ s3ConfigRoutes.get("/api/s3-configs/:id", async (c) => {
       const apiKey = authHeader.substring(7);
       // 查询API密钥和权限
       const keyRecord = await db
-          .prepare(
-              `SELECT id, name, file_permission, expires_at 
+        .prepare(
+          `SELECT id, name, file_permission, expires_at 
            FROM ${DbTables.API_KEYS} 
            WHERE key = ?`
-          )
-          .bind(apiKey)
-          .first();
+        )
+        .bind(apiKey)
+        .first();
 
       if (keyRecord && keyRecord.file_permission === 1) {
         // 检查是否过期
@@ -297,19 +297,19 @@ s3ConfigRoutes.post("/api/s3-configs/:id/test", authMiddleware, async (c) => {
   } catch (error) {
     console.error("测试S3配置错误:", error);
     return c.json(
-        {
-          code: ApiStatus.INTERNAL_ERROR,
-          message: error.message || "测试S3配置失败",
-          data: {
-            success: false,
-            result: {
-              error: error.message,
-              stack: process.env.NODE_ENV === "development" ? error.stack : null,
-            },
-          },
+      {
+        code: ApiStatus.INTERNAL_ERROR,
+        message: error.message || "测试S3配置失败",
+        data: {
           success: false,
+          result: {
+            error: error.message,
+            stack: process.env.NODE_ENV === "development" ? error.stack : null,
+          },
         },
-        ApiStatus.INTERNAL_ERROR
+        success: false,
+      },
+      ApiStatus.INTERNAL_ERROR
     );
   }
 });

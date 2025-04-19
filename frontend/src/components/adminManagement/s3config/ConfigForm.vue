@@ -144,6 +144,7 @@ const updateEndpoint = () => {
       formData.value.path_style = false;
       break;
     default:
+      // 其他S3兼容服务使用标准设置
       formData.value.endpoint_url = "https://your-s3-endpoint.com";
       formData.value.path_style = false;
       break;

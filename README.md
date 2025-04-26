@@ -509,6 +509,7 @@ server {
         proxy_pass http://localhost:8787;  # Docker后端服务地址
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
+        client_max_body_size 0;
 
         # WebSocket支持 (如果需要)
         proxy_http_version 1.1;

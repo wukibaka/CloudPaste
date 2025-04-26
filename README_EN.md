@@ -509,7 +509,8 @@ server {
         proxy_pass http://localhost:8787;  # Docker backend service address
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
-
+        client_max_body_size 0;
+        
         # WebSocket support (if needed)
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;

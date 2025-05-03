@@ -294,6 +294,7 @@ cd CloudPaste/backend
    ```bash
    npm run build
    ```
+ [Be careful when building! !](https://github.com/ling-drag0n/CloudPaste/issues/6#issuecomment-2818746354)
 
 4. Deploy to Cloudflare Pages
 

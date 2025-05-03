@@ -190,6 +190,7 @@ Fork 仓库，填好密钥，然后运行工作流
    ![test-1](./images/test-1.png)
 
 **<span style="color:red">务必严格按照步骤操作，否则会出现后端域名加载失败</span>**
+**<span style="color:red">⚠️ 安全提示：请在系统初始化后立即修改默认管理员密码（用户名: admin, 密码: admin123）。</span>**
 
 #### Vercel
 
@@ -294,6 +295,7 @@ cd CloudPaste/backend
    ```bash
    npm run build
    ```
+   [构建时需注意！！](https://github.com/ling-drag0n/CloudPaste/issues/6#issuecomment-2818746354)
 
 4. 部署到 Cloudflare Pages
 

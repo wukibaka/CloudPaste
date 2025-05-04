@@ -28,12 +28,12 @@ function setCorsHeaders(c) {
   const origin = c.req.header("Origin");
   c.header("Access-Control-Allow-Origin", origin || "*");
 
-  c.header("Access-Control-Allow-Headers", "Content-Type, Content-Length, Authorization, X-Requested-With");
-  c.header("Access-Control-Expose-Headers", "ETag, Content-Length, Content-Disposition, Access-Control-Allow-Origin");
+  c.header("Access-Control-Allow-Headers", "Content-Type, Content-Length, Authorization, X-Requested-With, Range");
+  c.header("Access-Control-Expose-Headers", "ETag, Content-Length, Content-Disposition");
   c.header("Access-Control-Allow-Credentials", "true");
   c.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
 
-  // 对于预览和下载请求，添加一个更长的缓存时间
+  // 对于预览和下载请求，添加适当的缓存时间
   if (c.req.path.includes("/preview") || c.req.path.includes("/download")) {
     c.header("Access-Control-Max-Age", "3600"); // 1小时
   }
@@ -44,6 +44,28 @@ fsRoutes.use("/api/admin/fs/*", authMiddleware);
 
 // API密钥用户文件系统访问
 fsRoutes.use("/api/user/fs/*", apiKeyFileMiddleware);
+
+// 处理预览和下载接口的OPTIONS请求 - 管理员版本
+fsRoutes.options("/api/admin/fs/preview", (c) => {
+  setCorsHeaders(c);
+  return c.text("", 204); // No Content
+});
+
+fsRoutes.options("/api/admin/fs/download", (c) => {
+  setCorsHeaders(c);
+  return c.text("", 204); // No Content
+});
+
+// 处理预览和下载接口的OPTIONS请求 - API密钥用户版本
+fsRoutes.options("/api/user/fs/preview", (c) => {
+  setCorsHeaders(c);
+  return c.text("", 204); // No Content
+});
+
+fsRoutes.options("/api/user/fs/download", (c) => {
+  setCorsHeaders(c);
+  return c.text("", 204); // No Content
+});
 
 // 列出目录内容 - 管理员版本
 fsRoutes.get("/api/admin/fs/list", async (c) => {

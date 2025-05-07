@@ -1,23 +1,23 @@
-# CloudPaste - 在线剪贴板 📋
+# CloudPaste - Online Clipboard 📋
 
 <div align="center">
     <p>
-    <a href="README.md">中文</a> | <a href="README_EN.md">English</a>
+    <a href="README_CN.md">中文</a> | <a href="README.md">English</a>
     </p>
     <img width="100" height="100" src="https://img.icons8.com/dusk/100/paste.png" alt="paste"/>
-    <h3>基于 Cloudflare 的在线剪贴板和文件分享服务，支持 Markdown 编辑和文件上传</h3>
+    <h3>Cloudflare-based online clipboard and file sharing service with Markdown editing and file upload support</h3>
 </div>
 
 <p align="center">
-  <a href="#-展示">📸 展示</a> •
-  <a href="#-特点">✨ 特点</a> •
-  <a href="#-部署教程">🚀 部署教程</a> •
-  <a href="#-技术栈">🔧 技术栈</a> •
-  <a href="#-开发">💻 开发</a> •
-  <a href="#-许可证">📄 许可证</a>
+  <a href="#-showcase">📸 Showcase</a> •
+  <a href="#-features">✨ Features</a> •
+  <a href="#-deployment-guide">🚀 Deployment Guide</a> •
+  <a href="#-tech-stack">🔧 Tech Stack</a> •
+  <a href="#-development">💻 Development</a> •
+  <a href="#-license">📄 License</a>
 </p>
 
-## 📸 展示
+## 📸 Showcase
 
 <table align="center">
   <tr>
@@ -32,257 +32,262 @@
     <td><img src="./images/image-5.png" width="400"/></td>
     <td><img src="./images/image-en1.png" width="400"/></td>
   </tr>
+  <tr>
+    <td><img src="./images/image-mount1.png" width="400"/></td>
+    <td><img src="./images/image-mount2.png" width="400"/></td>
+  </tr>
 </table>
 
-## ✨ 特点
+## ✨ Features
 
-### 📝 Markdown 编辑与分享
+### 📝 Markdown Editing and Sharing
 
-- **强大的编辑器**：集成 [Vditor](https://github.com/Vanessa219/vditor)，支持 GitHub 风格的 Markdown、数学公式、流程图、思维导图等
-- **安全分享**：内容可设置访问密码保护
-- **灵活时效**：支持设置内容过期时间
-- **访问控制**：可限制最大查看次数
-- **个性化**：自定义分享链接及备注
-- **支持文本 Raw 直链**：类似 gihub 的 Raw 直链，用于 yaml 配置文件来启动的服务
-- **多格式导出**：支持 PDF、Markdown、HTML、PNG 图片、Word 文档 导出
-- **便捷分享**：一键复制分享链接和生成二维码
-- **自动保存**：支持自动保存草稿功能
+- **Powerful Editor**: Integrated with [Vditor](https://github.com/Vanessa219/vditor), supporting GitHub-flavored Markdown, math formulas, flowcharts, mind maps, and more
+- **Secure Sharing**: Content can be protected with access passwords
+- **Flexible Expiration**: Support for setting content expiration times
+- **Access Control**: Ability to limit maximum view count
+- **Customization**: Personalized share links and notes
+- **Support for Raw text direct links**: Similar to GitHub's Raw direct links, used for services launched via YAML configuration files
+- **Multi-format export**: Supports export to PDF, Markdown, HTML, PNG images, and Word documents
+- **Easy Sharing**: One-click link copying and QR code generation
+- **Auto-save**: Support for automatic draft saving
 
-### 📤 文件上传与管理
+### 📤 File Upload and Management
 
-- **多存储支持**：兼容多种 S3 存储服务 (Cloudflare R2、Backblaze B2、AWS S3 等)
-- **存储配置**：可视化界面配置多个存储空间，灵活切换默认存储源
-- **高效上传**：通过预签名 URL 直接上传至 S3 存储，多文件上传
-- **实时反馈**：上传进度实时显示
-- **自定义限制**：单次上传限制和最大容量限制
-- **元数据管理**：文件备注、密码、过期时间、访问限制
-- **数据分析**：文件访问统计与趋势分析
-- **服务器直传**：支持调接口进行文件上传、下载等操作
+- **Multiple Storage Support**: Compatible with various S3 storage services (Cloudflare R2, Backblaze B2, AWS S3, etc.)
+- **Storage Configuration**: Visual interface for configuring multiple storage spaces, flexible switching of default storage sources
+- **Efficient Upload**: Direct upload to S3 storage via presigned URLs
+- **Real-time Feedback**: Real-time upload progress display
+- **Custom Limits**: Single upload limits and maximum capacity restrictions
+- **Metadata Management**: File notes, passwords, expiration times, access restrictions
+- **Data Analysis**: File access statistics and trend analysis
+- **Direct Server Transfer**: Supports calling APIs for file upload, download, and other operations.
 
-### 🛠 便捷的文件/文本操作
+### 🛠 Convenient File/Text Operations
 
-- **统一管理**：支持文件/文本创建、删除和属性修改
-- **在线预览**：常见文档、图片和媒体文件的在线预览与直链生成
-- **分享工具**：生成短链接和二维码，便于跨平台分享
-- **批量管理**：文件/文本批量操作与显示
+- **Unified Management**: Support for file/text creation, deletion, and property modification
+- **Online Preview**: Online preview and direct link generation for common documents, images, and media files
+- **Sharing Tools**: Generation of short links and QR codes for cross-platform sharing
+- **Batch Management**: Batch operations and display for files/text
 
-### 🔄 WebDAV 和挂载点管理
+### 🔄 WebDAV and Mount Point Management
 
-- **WebDAV 协议支持**：通过标准 WebDAV 协议访问和管理文件系统
-- **网络驱动器挂载**：支持 部分第三方客户端直接挂载
-- **灵活的挂载点**：支持创建多个挂载点，连接不同的存储服务
-- **权限控制**：精细的挂载点访问权限管理
-- **API 密钥集成**：通过 API 密钥授权 WebDAV 访问
-- **大文件支持**：自动使用分片上传机制处理大文件
-- **目录操作**：完整支持目录创建、上传、删除、重命名等操作
+- **WebDAV Protocol Support**: Access and manage the file system via standard WebDAV protocol
+- **Network Drive Mounting**: Support for mounting by some third-party clients
+- **Flexible Mount Points**: Support for creating multiple mount points connected to different storage services
+- **Permission Control**: Fine-grained mount point access permission management
+- **API Key Integration**: WebDAV access authorization through API keys
+- **Large File Support**: Automatic use of multipart upload mechanism for large files
+- **Directory Operations**: Full support for directory creation, upload, deletion, renaming, and other operations
 
-### 🔐 轻量权限管理
+### 🔐 Lightweight Permission Management
 
-#### 管理员权限控制
+#### Administrator Permission Control
 
-- **系统管理**：全局系统设置配置
-- **内容审核**：所有用户内容的管理
-- **存储管理**：S3 存储服务的添加、编辑与删除
-- **权限分配**：API 密钥的创建与权限管理
-- **数据分析**：完整的统计数据访问
+- **System Management**: Global system settings configuration
+- **Content Moderation**: Management of all user content
+- **Storage Management**: Addition, editing, and deletion of S3 storage services
+- **Permission Assignment**: Creation and permission management of API keys
+- **Data Analysis**: Complete access to statistical data
 
-#### API 密钥权限控制
+#### API Key Permission Control
 
-- **文本权限**：创建/编辑/删除文本内容
-- **文件权限**：上传/管理/删除文件
-- **存储权限**：可选择特定的存储配置
-- **读写分离**：可设置只读或读写权限
-- **时效控制**：自定义有效期（从小时到月）
-- **安全机制**：自动失效与手动撤销功能
+- **Text Permissions**: Create/edit/delete text content
+- **File Permissions**: Upload/manage/delete files
+- **Storage Permissions**: Ability to select specific storage configurations
+- **Read/Write Separation**: Can set read-only or read-write permissions
+- **Time Control**: Custom validity period (from hours to months)
+- **Security Mechanism**: Automatic expiration and manual revocation functions
 
-### 💫 系统功能
+### 💫 System Features
 
-- **适配性强**：响应式设计，适配移动设备和桌面
-- **多语言**：中/英文双语界面支持
-- **视觉模式**：明亮/暗黑主题切换
-- **安全认证**：基于 JWT 的管理员认证系统
-- **离线体验**：PWA 支持，可离线使用和安装到桌面
+- **High Adaptability**: Responsive design, adapting to mobile devices and desktops
+- **Multilingual**: Chinese/English bilingual interface support
+- **Visual Modes**: Bright/dark theme switching
+- **Secure Authentication**: JWT-based administrator authentication system
+- **Offline Experience**: PWA support, allowing offline use and desktop installation
 
-## 🚀 部署教程
+## 🚀 Deployment Guide
 
-### 前期准备
+### Prerequisites
 
-在开始部署前，请确保您已准备以下内容：
+Before starting deployment, please ensure you have prepared the following:
 
-- [ ] [Cloudflare](https://dash.cloudflare.com) 账号（必需）
-- [ ] 如使用 R2：开通 **Cloudflare R2** 服务并创建存储桶（需绑定支付方式）
-- [ ] 如使用 Vercel：注册 [Vercel](https://vercel.com) 账号
-- [ ] 其他 S3 存储服务的配置信息：
+- [ ] [Cloudflare](https://dash.cloudflare.com) account (required)
+- [ ] If using R2: Activate **Cloudflare R2** service and create a bucket (requires payment method)
+- [ ] If using Vercel: Register for a [Vercel](https://vercel.com) account
+- [ ] Configuration information for other S3 storage services:
    - `S3_ACCESS_KEY_ID`
    - `S3_SECRET_ACCESS_KEY`
    - `S3_BUCKET_NAME`
    - `S3_ENDPOINT`
 
 <details>
-<summary><b>👉 查看完整部署教程</b></summary>
+<summary><b>👉 View Complete Deployment Guide</b></summary>
 
-### 📑 目录
+### 📑 Table of Contents
 
-- [Action 自动部署](#Action自动部署:)
-   - [后端自动部署](#后端自动部署)
-   - [前端自动部署](#前端自动部署)
-- [手动部署](#手动部署:)
-   - [后端手动部署](#后端手动部署)
-   - [前端手动部署](#前端手动部署)
+- [Action Automated Deployment](#Action-Automated-Deployment)
+   - [Backend Automated Deployment](#Backend-Automated-Deployment)
+   - [Frontend Automated Deployment](#Frontend-Automated-Deployment)
+- [Manual Deployment](#Manual-Deployment)
+   - [Backend Manual Deployment](#Backend-Manual-Deployment)
+   - [Frontend Manual Deployment](#Frontend-Manual-Deployment)
 
 ---
 
-## Action 自动部署:
+## Action Automated Deployment
 
-使用 GitHub Actions 可以实现代码推送后自动部署应用。
+Using GitHub Actions enables automatic deployment of the application after code is pushed.
 
-### 配置 GitHub 仓库
+### Configure GitHub Repository
 
-1. Fork 或克隆仓库 [https://github.com/ling-drag0n/CloudPaste](https://github.com/ling-drag0n/CloudPaste)
-2. 进入您的 GitHub 仓库设置
-3. 转到 Settings → Secrets and variables → Actions → New Repository secrets
-4. 添加以下 Secrets：
+1. Fork or clone the repository [https://github.com/ling-drag0n/CloudPaste](https://github.com/ling-drag0n/CloudPaste)
+2. Go to your GitHub repository settings
+3. Navigate to Settings → Secrets and variables → Actions → New Repository secrets
+4. Add the following Secrets:
 
-| Secret 名称             | 必需 | 用途                                                  |
-| ----------------------- | ---- | ----------------------------------------------------- |
-| `CLOUDFLARE_API_TOKEN`  | ✅   | Cloudflare API 令牌（需要 Workers、D1 和 Pages 权限） |
-| `CLOUDFLARE_ACCOUNT_ID` | ✅   | Cloudflare 账户 ID                                    |
-| `ENCRYPTION_SECRET`     | ❌   | 用于加密敏感数据的密钥（如不提供，将自动生成）        |
+| Secret Name             | Required | Purpose                                                                                  |
+| ----------------------- | -------- | ---------------------------------------------------------------------------------------- |
+| `CLOUDFLARE_API_TOKEN`  | ✅       | Cloudflare API token (requires Workers, D1, and Pages permissions)                       |
+| `CLOUDFLARE_ACCOUNT_ID` | ✅       | Cloudflare account ID                                                                    |
+| `ENCRYPTION_SECRET`     | ❌       | Key for encrypting sensitive data (if not provided, one will be automatically generated) |
 
-#### 获取 Cloudflare API 令牌
+#### Obtain Cloudflare API Token
 
-1. 访问 [Cloudflare Dashboard](https://dash.cloudflare.com/profile/api-tokens)
-2. 创建新的 API 令牌
-3. 选择"编辑 Cloudflare Workers"模板，并添加 D1 数据库编辑权限
+1. Visit [Cloudflare Dashboard](https://dash.cloudflare.com/profile/api-tokens)
+2. Create a new API token
+3. Select the "Edit Cloudflare Workers" template, and add D1 database edit permission
 
-### 后端自动部署
+   ![D1](./images/D1.png)
 
-Fork 仓库，填好密钥，然后运行工作流!!!
-每当 `backend` 目录中的文件有更改并推送到 `main` 或 `master` 分支时，会自动触发部署。工作流程如下：
+### Backend Automated Deployment
 
-1. **自动创建 D1 数据库**（如果不存在）
-2. **用 schema.sql 初始化数据库**（创建表和初始数据）
-3. **设置 ENCRYPTION_SECRET 环境变量**（从 GitHub Secrets 获取或自动生成）
-4. 自动部署 Worker 到 Cloudflare
-5. 建议设置自定义域名代替 Cloudflare 原本提供的域名(否则国内无法访问)
+Fork the repository, fill in the secrets, and then run the workflow!!!
+Deployment is automatically triggered whenever files in the `backend` directory are changed and pushed to the `main` or `master` branch. The workflow proceeds as follows:
 
-**<span style="color:red">⚠️ 记住你的后端域名 </span>**
+1. **Automatically create D1 database** (if it doesn't exist)
+2. **Initialize database with schema.sql** (create tables and initial data)
+3. **Set ENCRYPTION_SECRET environment variable** (obtained from GitHub Secrets or automatically generated)
+4. Automatically deploy Worker to Cloudflare
+5. It is recommended to set up a custom domain to replace the original Cloudflare domain (otherwise it may not be accessible in certain regions)
 
-### 前端自动部署
+**<span style="color:red">⚠️ Remember your backend domain name</span>**
 
-#### Cloudflare Pages(推荐)
+### Frontend Automated Deployment
 
-Fork 仓库，填好密钥，然后运行工作流
-每当 `frontend` 目录中的文件有更改并推送到 `main` 或 `master` 分支时，会自动触发部署。部署后需在 Cloudflare Pages 控制面板设置环境变量：
+#### Cloudflare Pages (Recommended)
 
-1. 登录 [Cloudflare Dashboard](https://dash.cloudflare.com/)
-2. 导航到 Pages → 您的项目（如 "cloudpaste-frontend"）
-3. 点击 "Settings" → "Environment variables"
-4. 添加环境变量：
+Fork the repository, fill in the secrets, and then run the workflow.
+Deployment is automatically triggered whenever files in the `frontend` directory are changed and pushed to the `main` or `master` branch. After deployment, you need to set environment variables in the Cloudflare Pages control panel:
 
-   - 名称：`VITE_BACKEND_URL`
-   - 值：刚刚部署的后端 Worker URL（如 `https://cloudpaste-backend.your-username.workers.dev`），末尾不带"/", 同时建议使用自定义的 worker 后端域名。
+1. Log in to [Cloudflare Dashboard](https://dash.cloudflare.com/)
+2. Navigate to Pages → Your project (e.g., "cloudpaste-frontend")
+3. Click "Settings" → "Environment variables"
+4. Add environment variable:
 
-   - **<span style="color:red">一定要完整的填写后端域名,"https://xxxx.com" 格式</span>**
+   - Name: `VITE_BACKEND_URL`
+   - Value: Your backend Worker URL (e.g., `https://cloudpaste-backend.your-username.workers.dev`) without trailing "/". It is recommended to use a custom worker backend domain.
 
-5. 重要步骤： 随后要再次运行一遍前端的工作流，以便完成后端域名加载！！！
+   - **<span style="color:red">Make sure to enter the complete backend domain name in "https://xxxx.com" format</span>**
+
+5. Important step: Then run the frontend workflow again to complete loading the backend domain!!!
 
    ![test-1](./images/test-1.png)
 
-**<span style="color:red">务必严格按照步骤操作，否则会出现后端域名加载失败</span>**
-**<span style="color:red">⚠️ 安全提示：请在系统初始化后立即修改默认管理员密码（用户名: admin, 密码: admin123）。</span>**
+**<span style="color:red">Please follow the steps strictly, otherwise the backend domain loading will fail</span>**
 
 #### Vercel
 
-Vercel 建议使用以下方式部署：
+For Vercel, it's recommended to deploy as follows:
 
-1. Fork 后导入 GitHub 项目
-2. 配置部署参数：
+1. Import your GitHub project after forking
+2. Configure deployment parameters:
 
 ```
-Framework Preset（框架预设）: Vite
-Build Command（构建命令）: npm run build
-Output Directory（输出目录）: dist
-Install Command（安装命令）: npm install
+Framework Preset: Vite
+Build Command: npm run build
+Output Directory: dist
+Install Command: npm install
 ```
 
-3. 在下面配置环境变量：输入：VITE_BACKEND_URL 和你的后端域名
-4. 点击 "Deploy" 按钮进行部署
+3. Configure the environment variables below: Enter: VITE_BACKEND_URL and your backend domain
+4. Click the "Deploy" button to deploy
 
-☝️ **以上二选一即可**
+☝️ **Choose one of the above methods**
 
 ---
 
-## 手动部署:
+## Manual Deployment
 
-### 后端手动部署
+### Backend Manual Deployment
 
-1. 克隆仓库
+1. Clone the repository
 
 ```bash
 git clone https://github.com/ling-drag0n/CloudPaste.git
 cd CloudPaste/backend
 ```
 
-2. 安装依赖
+2. Install dependencies
 
    ```bash
    npm install
    ```
 
-3. 登录 Cloudflare
+3. Log in to Cloudflare
 
    ```bash
    npx wrangler login
    ```
 
-4. 创建 D1 数据库
+4. Create D1 database
 
    ```bash
    npx wrangler d1 create cloudpaste-db
    ```
 
-   记下输出的数据库 ID。
+   Note the database ID from the output.
 
-5. 修改 wrangler.toml 配置
+5. Modify wrangler.toml configuration
 
    ```toml
    [[d1_databases]]
    binding = "DB"
    database_name = "cloudpaste-db"
-   database_id = "您的数据库ID"
+   database_id = "YOUR_DATABASE_ID"
    ```
 
-6. 部署 Worker
+6. Deploy Worker
 
    ```bash
    npx wrangler deploy
    ```
 
-   记下输出的 URL，这是您的后端 API 地址。
+   Note the URL from the output; this is your backend API address.
 
-7. 初始化数据库（自动）
-   访问您的 Worker URL 触发初始化：
+7. Initialize database (automatic)
+   Visit your Worker URL to trigger initialization:
 
    ```
    https://cloudpaste-backend.your-username.workers.dev
    ```
 
-**<span style="color:red">⚠️ 安全提示：请在系统初始化后立即修改默认管理员密码（用户名: admin, 密码: admin123）。</span>**
+**<span style="color:red">⚠️ Security reminder: Please change the default administrator password immediately after system initialization (Username: admin, Password: admin123).</span>**
 
-### 前端手动部署
+### Frontend Manual Deployment
 
 #### Cloudflare Pages
 
-1. 准备前端代码
+1. Prepare frontend code
 
    ```bash
    cd CloudPaste/frontend
    npm install
    ```
 
-2. 配置环境变量
-   创建或修改 `.env.production` 文件：
+2. Configure environment variables
+   Create or modify the `.env.production` file:
 
    ```
    VITE_BACKEND_URL=https://cloudpaste-backend.your-username.workers.dev
@@ -290,100 +295,100 @@ cd CloudPaste/backend
    VITE_ENABLE_DEVTOOLS=false
    ```
 
-3. 构建前端项目
+3. Build frontend project
 
    ```bash
    npm run build
    ```
-   [构建时需注意！！](https://github.com/ling-drag0n/CloudPaste/issues/6#issuecomment-2818746354)
+ [Be careful when building! !](https://github.com/ling-drag0n/CloudPaste/issues/6#issuecomment-2818746354)
 
-4. 部署到 Cloudflare Pages
+4. Deploy to Cloudflare Pages
 
-   **方法一**：通过 Wrangler CLI
+   **Method 1**: Via Wrangler CLI
 
    ```bash
    npx wrangler pages deploy dist --project-name=cloudpaste-frontend
    ```
 
-   **方法二**：通过 Cloudflare Dashboard
+   **Method 2**: Via Cloudflare Dashboard
 
-   1. 登录 [Cloudflare Dashboard](https://dash.cloudflare.com/)
-   2. 选择 "Pages"
-   3. 点击 "Create a project" → "Direct Upload"
-   4. 上传 `dist` 目录内的文件
-   5. 设置项目名称（如 "cloudpaste-frontend"）
-   6. 点击 "Save and Deploy"
+   1. Log in to [Cloudflare Dashboard](https://dash.cloudflare.com/)
+   2. Select "Pages"
+   3. Click "Create a project" → "Direct Upload"
+   4. Upload files from the `dist` directory
+   5. Set project name (e.g., "cloudpaste-frontend")
+   6. Click "Save and Deploy"
 
 #### Vercel
 
-1. 准备前端代码
+1. Prepare frontend code
 
    ```bash
    cd CloudPaste/frontend
    npm install
    ```
 
-2. 安装并登录 Vercel CLI
+2. Install and log in to Vercel CLI
 
    ```bash
    npm install -g vercel
    vercel login
    ```
 
-3. 配置环境变量，与 Cloudflare Pages 相同
-4. 构建并部署
+3. Configure environment variables, same as for Cloudflare Pages
+4. Build and deploy
 
    ```bash
    vercel --prod
    ```
 
-   根据提示配置项目。
+   Follow the prompts to configure the project.
 
 </details>
 
 <details>
-<summary><b>👉 Docker部署教程</b></summary>
+<summary><b>👉 Docker Deployment Guide</b></summary>
 
-### 📑 目录
+### 📑 Table of Contents
 
-- [Docker 命令行部署](#Docker命令行部署:)
-   - [后端 Docker 部署](#后端Docker部署)
-   - [前端 Docker 部署](#前端Docker部署)
-- [Docker Compose 一键部署](#Docker-Compose一键部署:)
+- [Docker Command Line Deployment](#Docker-Command-Line-Deployment)
+   - [Backend Docker Deployment](#Backend-Docker-Deployment)
+   - [Frontend Docker Deployment](#Frontend-Docker-Deployment)
+- [Docker Compose One-Click Deployment](#Docker-Compose-One-Click-Deployment)
 
 ---
 
-## Docker 命令行部署:
+## Docker Command Line Deployment
 
-### 后端 Docker 部署
+### Backend Docker Deployment
 
-CloudPaste 后端支持通过官方 Docker 镜像快速部署。
+CloudPaste backend can be quickly deployed using the official Docker image.
 
-1. 创建数据存储目录
+1. Create data storage directory
 
    ```bash
    mkdir -p sql_data
    ```
 
-2. 运行后端容器
+2. Run the backend container
 
    ```bash
    docker run -d --name cloudpaste-backend \
      -p 8787:8787 \
      -v $(pwd)/sql_data:/data \
-     -e ENCRYPTION_SECRET=您的加密密钥 \
+     -e ENCRYPTION_SECRET=your-encryption-key \
      -e NODE_ENV=production \
      -e RUNTIME_ENV=docker \
      dragon730/cloudpaste-backend:latest
    ```
 
-   记下部署的 URL（如 `http://your-server-ip:8787`），后续前端部署需要用到。
+   Note the deployment URL (e.g., `http://your-server-ip:8787`), which will be needed for the frontend deployment.
 
-**<span style="color:red">⚠️ 安全提示：请务必自定义 ENCRYPTION_SECRET 并保存好，此密钥用于加密敏感数据。</span>**
+**<span style="color:red">⚠️ Security tip: Be sure to customize ENCRYPTION_SECRET and keep it safe, as this key is used to encrypt sensitive data.</span>**
 
-### 前端 Docker 部署
+### Frontend Docker Deployment
 
-前端使用 Nginx 提供服务，并在启动时配置后端 API 地址。
+The frontend uses Nginx to serve and configures the backend API address at startup.
 
 ```bash
 docker run -d --name cloudpaste-frontend \
@@ -392,34 +397,34 @@ docker run -d --name cloudpaste-frontend \
   dragon730/cloudpaste-frontend:latest
 ```
 
-**<span style="color:red">⚠️ 注意：BACKEND_URL 必须包含完整 URL（包括协议 http:// 或 https://）</span>**
-**<span style="color:red">⚠️ 安全提示：请在系统初始化后立即修改默认管理员密码（用户名: admin, 密码: admin123）。</span>**
+**<span style="color:red">⚠️ Note: BACKEND_URL must include the complete URL (including protocol http:// or https://)</span>**
+**<span style="color:red">⚠️ Security reminder: Please change the default administrator password immediately after system initialization (Username: admin, Password: admin123).</span>**
 
-### Docker 镜像更新
+### Docker Image Update
 
-当项目发布新版本时，您可以按以下步骤更新 Docker 部署：
+When a new version of the project is released, you can update your Docker deployment following these steps:
 
-1. 拉取最新镜像
+1. Pull the latest images
 
    ```bash
    docker pull dragon730/cloudpaste-backend:latest
    docker pull dragon730/cloudpaste-frontend:latest
    ```
 
-2. 停止并移除旧容器
+2. Stop and remove old containers
 
    ```bash
    docker stop cloudpaste-backend cloudpaste-frontend
    docker rm cloudpaste-backend cloudpaste-frontend
    ```
 
-3. 使用上述相同的运行命令启动新容器（保留数据目录和配置）
+3. Start new containers using the same run commands as above (preserving data directory and configuration)
 
-## Docker-Compose 一键部署:
+## Docker Compose One-Click Deployment
 
-使用 Docker Compose 可以一键部署前后端服务，是最简单推荐的方式。
+Using Docker Compose allows you to deploy both frontend and backend services with one click, which is the simplest recommended method.
 
-1. 创建 `docker-compose.yml` 文件
+1. Create a `docker-compose.yml` file
 
 ```yaml
 version: "3.8"
@@ -428,11 +433,11 @@ services:
   frontend:
     image: dragon730/cloudpaste-frontend:latest
     environment:
-      - BACKEND_URL=https://xxx.com # 填写后端服务地址
+      - BACKEND_URL=https://xxx.com # Fill in the backend service address
     ports:
       - "8080:80" #"127.0.0.1:8080:80"
     depends_on:
-      - backend # 依赖backend服务
+      - backend # Depends on backend service
     networks:
       - cloudpaste-network
     restart: unless-stopped
@@ -443,9 +448,9 @@ services:
       - NODE_ENV=production
       - RUNTIME_ENV=docker
       - PORT=8787
-      - ENCRYPTION_SECRET=自定义密钥 # 请修改为您自己的安全密钥
+      - ENCRYPTION_SECRET=custom-key # Please modify this to your own security key
     volumes:
-      - ./sql_data:/data # 数据持久化
+      - ./sql_data:/data # Data persistence
     ports:
       - "8787:8787" #"127.0.0.1:8787:8787"
     networks:
@@ -457,91 +462,91 @@ networks:
     driver: bridge
 ```
 
-2. 启动服务
+2. Start the services
 
 ```bash
 docker-compose up -d
 ```
 
-**<span style="color:red">⚠️ 安全提示：请在系统初始化后立即修改默认管理员密码（用户名: admin, 密码: admin123）。</span>**
+**<span style="color:red">⚠️ Security reminder: Please change the default administrator password immediately after system initialization (Username: admin, Password: admin123).</span>**
 
-3. 访问服务
+3. Access the services
 
-前端: `http://your-server-ip:80`
-后端: `http://your-server-ip:8787`
+Frontend: `http://your-server-ip:80`
+Backend: `http://your-server-ip:8787`
 
-### Docker Compose 更新
+### Docker Compose Update
 
-当需要更新到新版本时：
+When you need to update to a new version:
 
-1. 拉取最新镜像
+1. Pull the latest images
 
    ```bash
    docker-compose pull
    ```
 
-2. 使用新镜像重新创建容器（保留数据卷）
+2. Recreate containers using new images (preserving data volumes)
 
    ```bash
    docker-compose up -d --force-recreate
    ```
 
-**<span style="color:orange">💡 提示：如果遇到配置变更，可能需要备份数据后修改 docker-compose.yml 文件</span>**
+**<span style="color:orange">💡 Tip: If there are configuration changes, you may need to backup data and modify the docker-compose.yml file</span>**
 
-### Nginx 反代示例（仅供参考）
+### Nginx Reverse Proxy Example
 
 ```nginx
 server {
     listen 443 ssl;
-    server_name paste.yourdomain.com;  # 替换为您的域名
+    server_name paste.yourdomain.com;  # Replace with your domain name
 
-    # SSL 证书配置
-    ssl_certificate     /path/to/cert.pem;  # 替换为证书路径
-    ssl_certificate_key /path/to/key.pem;   # 替换为密钥路径
+    # SSL certificate configuration
+    ssl_certificate     /path/to/cert.pem;  # Replace with certificate path
+    ssl_certificate_key /path/to/key.pem;   # Replace with key path
 
-    # 前端代理配置
+    # Frontend proxy configuration
     location / {
-        proxy_pass http://localhost:80;  # Docker前端服务地址
+        proxy_pass http://localhost:80;  # Docker frontend service address
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
     }
 
-    # 后端API代理配置
+    # Backend API proxy configuration
     location /api {
-        proxy_pass http://localhost:8787;  # Docker后端服务地址
+        proxy_pass http://localhost:8787;  # Docker backend service address
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         client_max_body_size 0;
-
-        # WebSocket支持 (如果需要)
+        
+        # WebSocket support (if needed)
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
     }
 
-    # WebDav 配置
-    location /dav/ {
-        proxy_pass http://localhost:8787/dav/;  # 指向您的后端服务
+    # WebDAV Configuration
+    location /dav {
+        proxy_pass http://localhost:8787/dav;  # Points to your backend service
 
-        # WebDAV 必要头信息
+        # WebDAV necessary headers
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
 
-        # WebDAV 方法支持
+        # WebDAV method support
         proxy_pass_request_headers on;
 
-        # 支持所有WebDAV方法
+        # Support all WebDAV methods
         proxy_method $request_method;
 
-        # 必要的头信息处理
+        # Necessary header processing
         proxy_set_header Destination $http_destination;
         proxy_set_header Overwrite $http_overwrite;
 
-        # 处理大文件
+        # Handle large files
         client_max_body_size 0;
 
-        # 超时设置
+        # Timeout settings
         proxy_connect_timeout 3600s;
         proxy_send_timeout 3600s;
         proxy_read_timeout 3600s;
@@ -549,28 +554,28 @@ server {
 }
 ```
 
-**<span style="color:red">⚠️ 安全提示：建议配置 HTTPS 和反向代理（如 Nginx）以提升安全性。</span>**
+**<span style="color:red">⚠️ Security tip: It is recommended to configure HTTPS and a reverse proxy (such as Nginx) to enhance security.</span>**
 
 </details>
 
 <details>
-<summary><b>👉 S3相关跨域配置教程</b></summary>
+<summary><b>👉 S3 Cross-Origin Configuration Guide</b></summary>
 
-## R2 API 相关获取及跨域配置
+## R2 API Retrieval and Cross-Origin Configuration
 
-1. 登录 Cloudflare Dashboard
-2. 点击 R2 存储，创建一个存储桶。
-3. 创建 API 令牌
+1. Log in to Cloudflare Dashboard
+2. Click R2 Storage and create a bucket.
+3. Create API token
    ![R2api](./images/R2/R2-api.png)
    ![R2rw](./images/R2/R2-rw.png)
 
-4. 创建后把全部数据都保存好，后续要用
-5. 配置跨域规则，点击对应存储桶，点击设置，编辑 CORS 策略，如下所示：
+4. Save all data after creation; you'll need it later
+5. Configure cross-origin rules: click the corresponding bucket, click Settings, edit CORS policy as shown below:
 
 ```json
 [
   {
-    "AllowedOrigins": ["http://localhost:3000", "https://根据自己的前端域名来替代"],
+    "AllowedOrigins": ["http://localhost:3000", "https://replace-with-your-frontend-domain"],
     "AllowedMethods": ["GET", "PUT", "POST", "DELETE", "HEAD"],
     "AllowedHeaders": ["*"],
     "ExposeHeaders": ["ETag"],
@@ -579,257 +584,257 @@ server {
 ]
 ```
 
-## B2 API 相关获取及跨域配置
+## B2 API Retrieval and Cross-Origin Configuration
 
-1. 若没有 B2 账号，可以先[注册](https://www.backblaze.com/sign-up/cloud-storage?referrer=getstarted)一个，然后创建一个存储桶。
+1. If you don't have a B2 account, [register](https://www.backblaze.com/sign-up/cloud-storage?referrer=getstarted) one first, then create a bucket.
    ![B2账号注册](./images/B2/B2-1.png)
-2. 点击侧边栏的 Application Key，点击 Create Key，然后如图所示。
+2. Click Application Key in the sidebar, click Create Key, and follow the illustration.
    ![B2key](./images/B2/B2-2.png)
-3. 配置 B2 的跨域，B2 跨域配置比较麻烦，需注意
+3. Configure B2 cross-origin; B2 cross-origin configuration is more complex, take note
    ![B2cors](./images/B2/B2-3.png)
-4. 可以先尝试一下 1 或 2，去到上传页面看看是否能上传，F12 打开控制台若显示跨域错误，则使用 3。要一劳永逸就直接使用 3。
+4. You can try options 1 or 2 first, go to the upload page and see if you can upload. If F12 console shows cross-origin errors, use option 3. For a permanent solution, use option 3 directly.
 
    ![B21](./images/B2/B2-4.png)
 
-关于 3 的配置由于面板无法配置，只能手动配置，需[下载 B2 CLI](https://www.backblaze.com/docs/cloud-storage-command-line-tools)对应工具。具体可以参考："https://docs.cloudreve.org/use/policy/s3#backblaze-b2 " 。
+Regarding option 3 configuration, since the panel cannot configure it, you need to configure manually by [downloading B2 CLI](https://www.backblaze.com/docs/cloud-storage-command-line-tools) tool. For more details, refer to: "https://docs.cloudreve.org/use/policy/s3#backblaze-b2".
 
-下载后，在对应下载目录 cmd，在命令行输入以下命令：
+After downloading, in the corresponding download directory CMD, enter the following commands:
 
 ```txt
-b2.exe account authorize   //进行账号登录，根据提示填入之前的 keyID 和 applicationKey
-b2.exe bucket get <bucketName> //你可以执行获取bucket信息，<bucketName>换成桶名字
+b2.exe account authorize   //Log in to your account, following prompts to enter your keyID and applicationKey
+b2.exe bucket get <bucketName> //You can execute to get bucket information, replace <bucketName> with your bucket name
 ```
 
-windows 配置，采用“.\b2-windows.exe xxx”，
-所以在对应 cli 的 exe 文件夹中 cmd 输入，python 的 cli 也同理：
+Windows configuration, Use ".\b2-windows.exe xxx", 
+Python CLI would be similar:
 
 ```cmd
 b2.exe bucket update <bucketName> allPrivate --cors-rules "[{\"corsRuleName\":\"CloudPaste\",\"allowedOrigins\":[\"*\"],\"allowedHeaders\":[\"*\"],\"allowedOperations\":[\"b2_upload_file\",\"b2_download_file_by_name\",\"b2_download_file_by_id\",\"s3_head\",\"s3_get\",\"s3_put\",\"s3_post\",\"s3_delete\"],\"exposeHeaders\":[\"Etag\",\"content-length\",\"content-type\",\"x-bz-content-sha1\"],\"maxAgeSeconds\":3600}]"
 ```
 
-其中<bucketName>换成你的存储桶名字，关于允许跨域的域名 allowedOrigins 可以根据个人配置，这里是允许所有。
+Replace <bucketName> with your bucket name. For allowedOrigins in the cross-origin allowance, you can configure based on your needs; here it allows all.
 
-5. 已完成跨域配置
+5. Cross-origin configuration complete
 
-## 更多 S3 相关配置待续......
+## More S3-related configurations to come......
 
 </details>
 
 <details>
-<summary><b>👉 WebDAV配置详细指南</b></summary>
+<summary><b>👉 WebDAV Configuration Guide</b></summary>
 
-## WebDAV 配置与使用详解
+## WebDAV Configuration and Usage Guide
 
-CloudPaste 提供简易的 WebDAV 协议支持，允许您将存储空间挂载为网络驱动器，便于直接通过文件管理器访问和管理文件。
+CloudPaste provides simple WebDAV protocol support, allowing you to mount storage spaces as network drives for convenient access and management of files directly through file managers.
 
-### WebDAV 服务基本信息
+### WebDAV Service Basic Information
 
-- **WebDAV 基础 URL**: `https://你的后端域名/dav`
-- **支持的认证方式**:
-   - Basic 认证（用户名+密码）
-- **支持的权限类型**:
-   - 管理员账户 - 拥有完整操作权限
-   - API 密钥 - 需启用挂载权限（mount_permission）
+- **WebDAV Base URL**: `https://your-backend-domain/dav`
+- **Supported Authentication Methods**:
+   - Basic Authentication (username+password)
+- **Supported Permission Types**:
+   - Administrator accounts - Full operation permissions
+   - API keys - Requires enabled mount permission (mount_permission)
 
-### 权限配置
+### Permission Configuration
 
-#### 1. 管理员账户访问
+#### 1. Administrator Account Access
 
-使用管理员账户和密码直接访问 WebDAV 服务：
+Use administrator account and password to directly access the WebDAV service:
 
-- **用户名**: 管理员用户名
-- **密码**: 管理员密码
+- **Username**: Administrator username
+- **Password**: Administrator password
 
-#### 2. API 密钥访问（推荐）
+#### 2. API Key Access (Recommended)
 
-为更安全的访问方式，建议创建专用 API 密钥：
+For a more secure access method, it is recommended to create a dedicated API key:
 
-1. 登录管理界面
-2. 导航至"API 密钥管理"
-3. 创建新 API 密钥，**确保启用"挂载权限"**
-4. 使用方式：
-   - **用户名**: API 密钥值
-   - **密码**: 与用户名相同的 API 密钥值
+1. Log in to the management interface
+2. Navigate to "API Key Management"
+3. Create a new API key, **ensure "Mount Permission" is enabled**
+4. Usage method:
+   - **Username**: API key value
+   - **Password**: The same API key value as the username
 
-### NGINX 反向代理配置
+### NGINX Reverse Proxy Configuration
 
-如果使用 NGINX 作为反向代理，需要添加特定的 WebDAV 配置以确保所有 WebDAV 方法正常工作：
+If using NGINX as a reverse proxy, specific WebDAV configuration needs to be added to ensure all WebDAV methods work properly:
 
 ```nginx
-# WebDAV 配置
+# WebDAV Configuration
 location /dav {
-    proxy_pass http://localhost:8787;  # 指向您的后端服务
+    proxy_pass http://localhost:8787;  # Points to your backend service
 
-    # WebDAV 必要头信息
+    # WebDAV necessary headers
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
 
-    # WebDAV 方法支持
+    # WebDAV method support
     proxy_pass_request_headers on;
 
-    # 支持所有WebDAV方法
+    # Support all WebDAV methods
     proxy_method $request_method;
 
-    # 必要的头信息处理
+    # Necessary header processing
     proxy_set_header Destination $http_destination;
     proxy_set_header Overwrite $http_overwrite;
 
-    # 处理大文件
+    # Handle large files
     client_max_body_size 0;
 
-    # 超时设置
+    # Timeout settings
     proxy_connect_timeout 3600s;
     proxy_send_timeout 3600s;
     proxy_read_timeout 3600s;
 }
 ```
 
-### 常见问题解决
+### Common Issues and Solutions
 
-1. **连接问题**:
+1. **Connection Problems**:
 
-   - 确认 WebDAV URL 格式正确
-   - 验证认证凭据是否有效
-   - 检查 API 密钥是否具有挂载权限
+   - Confirm the WebDAV URL format is correct
+   - Verify that authentication credentials are valid
+   - Check if the API key has mount permission
 
-2. **权限错误**:
+2. **Permission Errors**:
 
-   - 确认账户具有所需的权限
-   - 管理员账户应有完整权限
-   - API 密钥需特别启用挂载权限
+   - Confirm the account has the required permissions
+   - Administrator accounts should have full permissions
+   - API keys need to have mount permission specifically enabled
 
-3. **⚠️⚠️ Webdav 上传问题**:
+3. **⚠️⚠️ WebDAV Upload Issues**:
 
-   - 预签名上传模式下，需要注意配置对应的 S3 存储的跨域配置
-   - WebDav 的自动推荐模式下，小于 10MB 文件采用直传模式，10-50MB 文件采用分片上传模式，大于 50MB 文件采用预签名上传模式。
-   - 关于 Cloudflare 的 Worker 上传限制，建议使用预签名或直传模式，不要使用分片
-   - 对于 Docker 部署，只需注意 nginx 代理配置，上传模式任意。
-   - Windows，Raidrive 等客户端挂载暂不支持拖动上传
+   - In presigned upload mode, attention needs to be paid to the cross-origin configuration of the corresponding S3 storage
+   - In WebDAV's automatic recommendation mode, files smaller than 10MB use direct upload mode, files between 10-50MB use multipart upload mode, and files larger than 50MB use presigned upload mode
+   - Regarding Cloudflare Worker upload limitations, it is recommended to use presigned or direct upload mode, and avoid using multipart uploads
+   - For Docker deployments, just pay attention to the nginx proxy configuration, any upload mode is acceptable
+   - Windows, Raidrive and other clients do not yet support drag-and-drop uploads, everything else works
 
 </details>
 
-## 🔧 技术栈
+## 🔧 Tech Stack
 
-### 前端
+### Frontend
 
-- **框架**: Vue.js 3 + Vite
-- **样式**: TailwindCSS
-- **编辑器**: Vditor
-- **国际化**: Vue-i18n
-- **图表**: Chart.js + Vue-chartjs
+- **Framework**: Vue.js 3 + Vite
+- **Styling**: TailwindCSS
+- **Editor**: Vditor
+- **Internationalization**: Vue-i18n
+- **Charts**: Chart.js + Vue-chartjs
 
-### 后端
+### Backend
 
-- **运行时**: Cloudflare Workers
-- **框架**: Hono
-- **数据库**: Cloudflare D1 (SQLite)
-- **存储**: 多 S3 兼容服务 (支持 R2, B2, AWS S3)
-- **认证**: JWT 令牌 + API 密钥
+- **Runtime**: Cloudflare Workers
+- **Framework**: Hono
+- **Database**: Cloudflare D1 (SQLite)
+- **Storage**: Multiple S3-compatible services (supports R2, B2, AWS S3)
+- **Authentication**: JWT tokens + API keys
 
-## 💻 开发
+## 💻 Development
 
-### API 文档
+### API Documentation
 
-[API 文档](Api-doc.md)
+[API Documentation](Api-doc.md)
 
-[服务器 文件直传 API 文档](Api-s3_direct.md) - 服务器 文件直传接口详细说明
+[Server Direct File Upload API Documentation](Api-s3_direct.md) - Detailed description of the server direct file upload interface
 
-### 本地开发设置
+### Local Development Setup
 
-1. **克隆项目仓库**
+1. **Clone project repository**
 
    ```bash
    git clone https://github.com/ling-drag0n/cloudpaste.git
    cd cloudpaste
    ```
 
-2. **后端设置**
+2. **Backend setup**
 
    ```bash
    cd backend
    npm install
-   # 初始化 D1 数据库
+   # Initialize D1 database
    wrangler d1 create cloudpaste-db
    wrangler d1 execute cloudpaste-db --file=./schema.sql
    ```
 
-3. **前端设置**
+3. **Frontend setup**
 
    ```bash
    cd frontend
    npm install
    ```
 
-4. **配置环境变量**
+4. **Configure environment variables**
 
-   - 在 `backend` 目录下，创建 `wrangler.toml` 文件设置开发环境变量
-   - 在 `frontend` 目录下，配置 `.env.development` 文件设置前端环境变量
+   - In the `backend` directory, create a `wrangler.toml` file to set development environment variables
+   - In the `frontend` directory, configure the `.env.development` file to set frontend environment variables
 
-5. **启动开发服务器**
+5. **Start development servers**
 
    ```bash
-   # 后端
+   # Backend
    cd backend
    npm run dev
 
-   # 前端 (另一个终端)
+   # Frontend (in another terminal)
    cd frontend
    npm run dev
    ```
 
-### 项目结构
+### Project Structure
 
 ```
 CloudPaste/
-├── frontend/                # 前端 Vue.js 应用
-│   ├── src/                 # 源代码
-│   │   ├── components/      # Vue 组件
-│   │   ├── api/             # API 客户端和服务
-│   │   ├── i18n/            # 国际化资源文件
-│   │   ├── utils/           # 工具函数
-│   │   └── assets/          # 静态资源
+├── frontend/                # Frontend Vue.js application
+│   ├── src/                 # Source code
+│   │   ├── components/      # Vue components
+│   │   ├── api/             # API clients and services
+│   │   ├── i18n/            # Internationalization resource files
+│   │   ├── utils/           # Utility functions
+│   │   └── assets/          # Static assets
 │   └── ...
-└── backend/                 # Cloudflare Workers 后端
-    ├── worker.js            # 主要 Worker 文件
-    ├── schema.sql           # D1 数据库模式
+└── backend/                 # Cloudflare Workers backend
+    ├── worker.js            # Main Worker file
+    ├── schema.sql           # D1 database schema
     └── ...
 ```
 
-### 自定义 Docker 构建
+### Custom Docker Build
 
-如果您希望自定义 Docker 镜像或进行开发调试，可以按照以下步骤手动构建：
+If you want to customize Docker images or debug during development, you can follow these steps to build manually:
 
-1. **构建后端镜像**
+1. **Build backend image**
 
    ```bash
-   # 在项目根目录执行
+   # Execute in the project root directory
    docker build -t cloudpaste-backend:custom -f docker/backend/Dockerfile .
 
-   # 运行自定义构建的镜像
+   # Run the custom built image
    docker run -d --name cloudpaste-backend \
      -p 8787:8787 \
      -v $(pwd)/sql_data:/data \
-     -e ENCRYPTION_SECRET=开发测试密钥 \
+     -e ENCRYPTION_SECRET=development-test-key \
      cloudpaste-backend:custom
    ```
 
-2. **构建前端镜像**
+2. **Build frontend image**
 
    ```bash
-   # 在项目根目录执行
+   # Execute in the project root directory
    docker build -t cloudpaste-frontend:custom -f docker/frontend/Dockerfile .
 
-   # 运行自定义构建的镜像
+   # Run the custom built image
    docker run -d --name cloudpaste-frontend \
      -p 80:80 \
      -e BACKEND_URL=http://localhost:8787 \
      cloudpaste-frontend:custom
    ```
 
-3. **开发环境 Docker Compose**
+3. **Development environment Docker Compose**
 
-   创建 `docker-compose.dev.yml` 文件：
+   Create a `docker-compose.dev.yml` file:
 
    ```yaml
    version: "3.8"
@@ -861,20 +866,20 @@ CloudPaste/
          - "8787:8787"
    ```
 
-   启动开发环境：
+   Start the development environment:
 
    ```bash
    docker-compose -f docker-compose.yml up --build
    ```
 
-## 📄 许可证
+## 📄 License
 
 Apache License 2.0
 
-本项目使用 Apache License 2.0 许可证 - 详情请参阅 [LICENSE](LICENSE) 文件。
+This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
 
 ## Star History
 
 [![Star History Chart](https://api.star-history.com/svg?repos=ling-drag0n/CloudPaste&type=Date)](https://star-history.com/#ling-drag0n/CloudPaste&Date)
 
-**如果觉得项目不错希望您能给个免费的 star✨✨，非常感谢！**
+**If you think the project is good I hope you can give a free star✨✨, Thank you very much!**

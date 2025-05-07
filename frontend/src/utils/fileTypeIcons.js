@@ -4,7 +4,7 @@
  */
 
 // 获取文件扩展名（小写形式）
-const getFileExtension = (fileName) => {
+export const getFileExtension = (fileName) => {
   if (!fileName) return "";
   const parts = fileName.split(".");
   if (parts.length === 1) return "";
@@ -42,7 +42,7 @@ const fileIconsMap = {
     <svg xmlns="http://www.w3.org/2000/svg" class="w-full h-full" viewBox="0 0 24 24" fill="none">
       <path d="M14 2H6C5.46957 2 4.96086 2.21071 4.58579 2.58579C4.21071 2.96086 4 3.46957 4 4V20C4 20.5304 4.21071 21.0391 4.58579 21.4142C4.96086 21.7893 5.46957 22 6 22H18C18.5304 22 19.0391 21.7893 19.4142 21.4142C19.7893 21.0391 20 20.5304 20 20V8L14 2Z" 
         stroke="${darkMode ? "#ef4444" : "#b91c1c"}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="${darkMode ? "#fee2e2" : "#fee2e2"}" fill-opacity="${
-    darkMode ? "0.1" : "0.2"
+      darkMode ? "0.1" : "0.2"
   }"/>
       <path d="M14 2V8H20" stroke="${darkMode ? "#ef4444" : "#b91c1c"}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
       <path d="M8 12.5H9V11.5H10V15.5H9V13.5H8V12.5Z" fill="${darkMode ? "#ef4444" : "#b91c1c"}"/>
@@ -55,7 +55,7 @@ const fileIconsMap = {
   code: (darkMode = false) => `
     <svg xmlns="http://www.w3.org/2000/svg" class="w-full h-full" viewBox="0 0 24 24" fill="none">
       <rect x="2" y="3" width="20" height="18" rx="2" stroke="${darkMode ? "#a78bfa" : "#7c3aed"}" stroke-width="2" fill="${darkMode ? "#a78bfa" : "#7c3aed"}" fill-opacity="${
-    darkMode ? "0.1" : "0.1"
+      darkMode ? "0.1" : "0.1"
   }"/>
       <path d="M9 9L5 12L9 15" stroke="${darkMode ? "#a78bfa" : "#7c3aed"}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
       <path d="M15 9L19 12L15 15" stroke="${darkMode ? "#a78bfa" : "#7c3aed"}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -67,7 +67,7 @@ const fileIconsMap = {
   archive: (darkMode = false) => `
     <svg xmlns="http://www.w3.org/2000/svg" class="w-full h-full" viewBox="0 0 24 24" fill="none">
       <rect x="4" y="2" width="16" height="20" rx="2" stroke="${darkMode ? "#fbbf24" : "#d97706"}" stroke-width="2" fill="${darkMode ? "#fbbf24" : "#d97706"}" fill-opacity="${
-    darkMode ? "0.1" : "0.1"
+      darkMode ? "0.1" : "0.1"
   }"/>
       <path d="M10 2H14V4H10V2Z" fill="${darkMode ? "#fbbf24" : "#d97706"}"/>
       <path d="M10 6H14V8H10V6Z" fill="${darkMode ? "#fbbf24" : "#d97706"}"/>
@@ -83,11 +83,11 @@ const fileIconsMap = {
       <path d="M9 18V5L21 3V16" stroke="${darkMode ? "#22d3ee" : "#0891b2"}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
       <path d="M6 21C7.65685 21 9 19.6569 9 18C9 16.3431 7.65685 15 6 15C4.34315 15 3 16.3431 3 18C3 19.6569 4.34315 21 6 21Z" 
         stroke="${darkMode ? "#22d3ee" : "#0891b2"}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="${darkMode ? "#22d3ee" : "#0891b2"}" fill-opacity="${
-    darkMode ? "0.1" : "0.1"
+      darkMode ? "0.1" : "0.1"
   }"/>
       <path d="M18 19C19.6569 19 21 17.6569 21 16C21 14.3431 19.6569 13 18 13C16.3431 13 15 14.3431 15 16C15 17.6569 16.3431 19 18 19Z" 
         stroke="${darkMode ? "#22d3ee" : "#0891b2"}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="${darkMode ? "#22d3ee" : "#0891b2"}" fill-opacity="${
-    darkMode ? "0.1" : "0.1"
+      darkMode ? "0.1" : "0.1"
   }"/>
     </svg>
   `,
@@ -96,10 +96,10 @@ const fileIconsMap = {
   video: (darkMode = false) => `
     <svg xmlns="http://www.w3.org/2000/svg" class="w-full h-full" viewBox="0 0 24 24" fill="none">
       <rect x="2" y="4" width="20" height="16" rx="2" stroke="${darkMode ? "#ec4899" : "#db2777"}" stroke-width="2" fill="${darkMode ? "#ec4899" : "#db2777"}" fill-opacity="${
-    darkMode ? "0.1" : "0.1"
+      darkMode ? "0.1" : "0.1"
   }"/>
       <path d="M10 9L15 12L10 15V9Z" fill="${darkMode ? "#ec4899" : "#db2777"}" stroke="${
-    darkMode ? "#ec4899" : "#db2777"
+      darkMode ? "#ec4899" : "#db2777"
   }" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
     </svg>
   `,
@@ -108,7 +108,7 @@ const fileIconsMap = {
   executable: (darkMode = false) => `
     <svg xmlns="http://www.w3.org/2000/svg" class="w-full h-full" viewBox="0 0 24 24" fill="none">
       <rect x="2" y="3" width="20" height="18" rx="2" stroke="${darkMode ? "#10b981" : "#059669"}" stroke-width="2" fill="${darkMode ? "#10b981" : "#059669"}" fill-opacity="${
-    darkMode ? "0.1" : "0.1"
+      darkMode ? "0.1" : "0.1"
   }"/>
       <path d="M12 7L12 13" stroke="${darkMode ? "#10b981" : "#059669"}" stroke-width="2" stroke-linecap="round"/>
       <circle cx="12" cy="16" r="1" fill="${darkMode ? "#10b981" : "#059669"}"/>
@@ -120,7 +120,7 @@ const fileIconsMap = {
     <svg xmlns="http://www.w3.org/2000/svg" class="w-full h-full" viewBox="0 0 24 24" fill="none">
       <path d="M14 2H6C5.46957 2 4.96086 2.21071 4.58579 2.58579C4.21071 2.96086 4 3.46957 4 4V20C4 20.5304 4.21071 21.0391 4.58579 21.4142C4.96086 21.7893 5.46957 22 6 22H18C18.5304 22 19.0391 21.7893 19.4142 21.4142C19.7893 21.0391 20 20.5304 20 20V8L14 2Z" 
         stroke="${darkMode ? "#93c5fd" : "#3b82f6"}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="${darkMode ? "#93c5fd" : "#3b82f6"}" fill-opacity="${
-    darkMode ? "0.1" : "0.1"
+      darkMode ? "0.1" : "0.1"
   }"/>
       <path d="M14 2V8H20" stroke="${darkMode ? "#93c5fd" : "#3b82f6"}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
     </svg>
@@ -136,19 +136,19 @@ const fileIconsMap = {
       <!-- 文件夹打开效果 - 底部 -->
       <path d="M3.5 7.5C3.5 6.67157 4.17157 6 5 6H19C19.8284 6 20.5 6.67157 20.5 7.5V18C20.5 18.8284 19.8284 19.5 19 19.5H5C4.17157 19.5 3.5 18.8284 3.5 18V7.5Z" 
         fill="${darkMode ? "#fbbf24" : "#fcd34d"}" fill-opacity="${darkMode ? "0.25" : "0.4"}" stroke="${
-    darkMode ? "#fbbf24" : "#d97706"
+      darkMode ? "#fbbf24" : "#d97706"
   }" stroke-width="1" stroke-linejoin="round"/>
 
       <!-- 文件夹打开效果 - 顶部翻盖 -->
       <path d="M4 5.5C4 4.94772 4.44772 4.5 5 4.5H8.5C8.89746 4.5 9.27285 4.67755 9.53553 4.98223L11.2678 7H19C19.2761 7 19.5 7.22386 19.5 7.5V8.5H4V5.5Z" 
         fill="${darkMode ? "#f59e0b" : "#f59e0b"}" fill-opacity="${darkMode ? "0.45" : "0.6"}" stroke="${
-    darkMode ? "#fbbf24" : "#d97706"
+      darkMode ? "#fbbf24" : "#d97706"
   }" stroke-width="1" stroke-linejoin="round"/>
 
       <!-- 折角效果 -->
       <path d="M5 4.5L5.75 5.25H8.25L9.5 6.25H8L7.25 5.5H5V4.5Z" 
         fill="${darkMode ? "#fbbf24" : "#f59e0b"}" fill-opacity="${darkMode ? "0.6" : "0.8"}" stroke="${
-    darkMode ? "#fbbf24" : "#d97706"
+      darkMode ? "#fbbf24" : "#d97706"
   }" stroke-width="0.5" stroke-linejoin="round"/>
     </svg>
   `,
@@ -163,19 +163,19 @@ const fileIconsMap = {
       <!-- 文件夹打开效果 - 底部 -->
       <path d="M3.5 7.5C3.5 6.67157 4.17157 6 5 6H19C19.8284 6 20.5 6.67157 20.5 7.5V18C20.5 18.8284 19.8284 19.5 19 19.5H5C4.17157 19.5 3.5 18.8284 3.5 18V7.5Z" 
         fill="${darkMode ? "#3b82f6" : "#60a5fa"}" fill-opacity="${darkMode ? "0.25" : "0.4"}" stroke="${
-    darkMode ? "#3b82f6" : "#2563eb"
+      darkMode ? "#3b82f6" : "#2563eb"
   }" stroke-width="1" stroke-linejoin="round"/>
 
       <!-- 文件夹打开效果 - 顶部翻盖 -->
       <path d="M4 5.5C4 4.94772 4.44772 4.5 5 4.5H8.5C8.89746 4.5 9.27285 4.67755 9.53553 4.98223L11.2678 7H19C19.2761 7 19.5 7.22386 19.5 7.5V8.5H4V5.5Z" 
         fill="${darkMode ? "#2563eb" : "#3b82f6"}" fill-opacity="${darkMode ? "0.45" : "0.6"}" stroke="${
-    darkMode ? "#3b82f6" : "#2563eb"
+      darkMode ? "#3b82f6" : "#2563eb"
   }" stroke-width="1" stroke-linejoin="round"/>
 
       <!-- 折角效果 -->
       <path d="M5 4.5L5.75 5.25H8.25L9.5 6.25H8L7.25 5.5H5V4.5Z" 
         fill="${darkMode ? "#3b82f6" : "#2563eb"}" fill-opacity="${darkMode ? "0.6" : "0.8"}" stroke="${
-    darkMode ? "#3b82f6" : "#2563eb"
+      darkMode ? "#3b82f6" : "#2563eb"
   }" stroke-width="0.5" stroke-linejoin="round"/>
 
       <!-- 挂载标识 "+" 符号 -->
@@ -186,7 +186,7 @@ const fileIconsMap = {
 };
 
 // 文件扩展名到图标类型的映射
-const extensionToTypeMap = {
+export const extensionToTypeMap = {
   // 图片文件
   jpg: "image",
   jpeg: "image",

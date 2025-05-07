@@ -655,6 +655,16 @@
     ```
   - 响应：批量删除结果
 
+- `GET /api/admin/fs/file-link`
+
+  - 描述：获取文件直链(预签名 URL)，可用于直接访问文件，无需再次身份验证
+  - 授权：需要管理员令牌
+  - 查询参数：
+    - `path` - 文件路径（必填）
+    - `expires_in` - 链接有效期（秒），默认为 604800（7 天）
+    - `force_download` - 是否强制下载，true 或 false（默认 false）
+  - 响应：包含预签名 URL 的对象，可直接访问或分享
+
 - `POST /api/admin/fs/presign`
 
   - 描述：获取管理员预签名上传 URL，用于直接上传文件到存储系统
@@ -773,6 +783,16 @@
     }
     ```
   - 响应：批量删除结果
+
+- `GET /api/user/fs/file-link`
+
+  - 描述：获取文件直链(预签名 URL)，可用于直接访问文件，无需再次身份验证
+  - 授权：需要有文件权限的 API 密钥
+  - 查询参数：
+    - `path` - 文件路径（必填）
+    - `expires_in` - 链接有效期（秒），默认为 604800（7 天）
+    - `force_download` - 是否强制下载，true 或 false（默认 false）
+  - 响应：包含预签名 URL 的对象，可直接访问或分享
 
 - `POST /api/user/fs/presign`
 
@@ -910,3 +930,149 @@
   - 权限要求：
     - 管理员账户：自动拥有所有操作权限
     - API 密钥：需要具有挂载权限（mount_permission）
+
+### URL 上传 API
+
+#### URL 验证与元信息
+
+- `POST /api/url/info`
+
+  - 描述：验证 URL 并获取文件元信息
+  - 授权：无需授权
+  - 请求体：
+    ```json
+    {
+      "url": "https://example.com/image.jpg" // 必填，要验证的URL
+    }
+    ```
+  - 响应：包含 URL 文件的元信息，如文件名、大小、MIME 类型等
+
+- `GET /api/url/proxy`
+
+  - 描述：代理 URL 内容，用于不支持 CORS 的资源
+  - 授权：无需授权
+  - 查询参数：
+    - `url` - 要代理的 URL（必填）
+  - 响应：原始 URL 的内容流（适用于前端无法直接访问的资源）
+
+#### URL 上传准备与提交
+
+- `POST /api/url/presign`
+
+  - 描述：为 URL 上传准备预签名 URL 和文件记录
+  - 授权：需要管理员令牌或有文件权限的 API 密钥
+  - 请求体：
+    ```json
+    {
+      "url": "https://example.com/image.jpg", // 必填，源文件URL
+      "s3_config_id": "S3配置ID", // 必填，上传目标S3配置
+      "metadata": {
+        // 可选，自定义元数据
+        "filename": "自定义文件名.jpg",
+        "contentType": "image/jpeg"
+      },
+      "filename": "自定义文件名.jpg", // 可选，覆盖元数据中的文件名
+      "slug": "custom-slug", // 可选，自定义短链接
+      "remark": "文件备注", // 可选，文件说明
+      "path": "custom/path/" // 可选，自定义存储路径
+    }
+    ```
+  - 响应：包含上传信息和预签名 URL 的对象
+
+- `POST /api/url/commit`
+
+  - 描述：URL 上传完成后的提交确认
+  - 授权：需要管理员令牌或有文件权限的 API 密钥
+  - 请求体：
+    ```json
+    {
+      "file_id": "文件ID", // 必填
+      "etag": "文件ETag", // 必填，S3返回的ETag
+      "size": 1024000, // 可选，文件大小（字节）
+      "remark": "文件备注", // 可选
+      "password": "访问密码", // 可选
+      "expires_in": 168, // 可选，过期时间（小时）
+      "max_views": 10, // 可选，最大查看次数
+      "slug": "custom-slug" // 可选，自定义短链接
+    }
+    ```
+  - 响应：文件提交结果和访问信息
+
+#### URL 分片上传
+
+- `POST /api/url/multipart/init`
+
+  - 描述：初始化 URL 分片上传流程
+  - 授权：需要管理员令牌或有文件权限的 API 密钥
+  - 请求体：
+    ```json
+    {
+      "url": "https://example.com/largefile.zip", // 必填，源文件URL
+      "s3_config_id": "S3配置ID", // 必填，上传目标S3配置
+      "metadata": {
+        // 可选，自定义元数据
+        "filename": "自定义文件名.zip",
+        "contentType": "application/zip"
+      },
+      "filename": "自定义文件名.zip", // 可选，覆盖元数据中的文件名
+      "slug": "custom-slug", // 可选，自定义短链接
+      "remark": "文件备注", // 可选
+      "password": "访问密码", // 可选
+      "expires_in": 168, // 可选，过期时间（小时）
+      "max_views": 10, // 可选，最大查看次数
+      "part_size": 5242880, // 可选，分片大小（字节）
+      "total_size": 104857600, // 可选，总文件大小（字节）
+      "part_count": 20, // 可选，分片数量
+      "path": "custom/path/" // 可选，自定义存储路径
+    }
+    ```
+  - 响应：初始化结果，包含 uploadId 和分片上传配置
+
+- `POST /api/url/multipart/complete`
+
+  - 描述：完成 URL 分片上传流程
+  - 授权：需要管理员令牌或有文件权限的 API 密钥
+  - 请求体：
+    ```json
+    {
+      "file_id": "文件ID", // 必填
+      "upload_id": "上传ID", // 必填，来自init响应
+      "parts": [
+        // 必填，分片信息数组
+        {
+          "PartNumber": 1,
+          "ETag": "分片1的ETag"
+        },
+        {
+          "PartNumber": 2,
+          "ETag": "分片2的ETag"
+        }
+      ]
+    }
+    ```
+  - 响应：完成结果和文件访问信息
+
+- `POST /api/url/multipart/abort`
+
+  - 描述：终止 URL 分片上传流程
+  - 授权：需要管理员令牌或有文件权限的 API 密钥
+  - 请求体：
+    ```json
+    {
+      "file_id": "文件ID", // 必填
+      "upload_id": "上传ID" // 必填，来自init响应
+    }
+    ```
+  - 响应：终止结果
+
+- `POST /api/url/cancel`
+
+  - 描述：取消 URL 上传并删除文件记录
+  - 授权：需要管理员令牌或有文件权限的 API 密钥
+  - 请求体：
+    ```json
+    {
+      "file_id": "文件ID" // 必填，要取消上传的文件ID
+    }
+    ```
+  - 响应：取消结果和清理状态

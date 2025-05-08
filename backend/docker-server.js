@@ -502,6 +502,16 @@ server.get("/api/file-view/:slug", async (req, res) => {
   }
 });
 
+server.get("/api/office-preview/:slug", async (req, res) => {
+  try {
+    const response = await app.fetch(createAdaptedRequest(req), req.env, {});
+    await convertWorkerResponseToExpress(response, res);
+  } catch (error) {
+    logMessage("error", "Office预览URL生成错误:", { error });
+    res.status(ApiStatus.INTERNAL_ERROR).json(createErrorResponse(error, ApiStatus.INTERNAL_ERROR, "Office预览URL生成失败"));
+  }
+});
+
 // 通配符路由 - 处理所有其他API请求
 server.use("*", async (req, res) => {
   try {

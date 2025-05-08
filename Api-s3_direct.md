@@ -22,17 +22,18 @@ https://{域名}/api/upload-direct/{filename}
 
 以下查询参数可以附加到请求 URL 中:
 
-| 参数名       | 类型   | 必填 | 默认值   | 描述                                                                |
-| ------------ | ------ | ---- | -------- | ------------------------------------------------------------------- |
-| slug         | string | 否   | 自动生成 | 自定义短链接，用于访问文件。只能包含字母、数字、下划线和横杠。      |
-| path         | string | 否   | 空       | 自定义路径，文件将存储在这个路径下。                                |
-| s3_config_id | string | 否   | 默认配置 | 指定 S3 配置 ID。若不提供，系统将选择默认配置。                     |
-| expires_in   | number | 否   | 0        | 文件过期时间（小时）。0 表示永不过期。                              |
-| max_views    | number | 否   | 0        | 文件最大查看次数。0 表示无限制。                                    |
-| remark       | string | 否   | 空       | 文件备注信息。                                                      |
-| password     | string | 否   | 空       | 访问密码，设置后需要密码才能访问文件。                              |
-| use_proxy    | string | 否   | "1"      | 是否使用代理访问。"1"表示使用代理，"0"表示直接访问 S3。             |
-| override     | string | 否   | "false"  | 是否覆盖同名 slug 的已存在文件。"true"表示覆盖，"false"表示不覆盖。 |
+| 参数名            | 类型   | 必填 | 默认值   | 描述                                                                        |
+| ----------------- | ------ | ---- | -------- | --------------------------------------------------------------------------- |
+| slug              | string | 否   | 自动生成 | 自定义短链接，用于访问文件。只能包含字母、数字、下划线和横杠。              |
+| path              | string | 否   | 空       | 自定义路径，文件将存储在这个路径下。                                        |
+| s3_config_id      | string | 否   | 默认配置 | 指定 S3 配置 ID。若不提供，系统将选择默认配置。                             |
+| expires_in        | number | 否   | 0        | 文件过期时间（小时）。0 表示永不过期。                                      |
+| max_views         | number | 否   | 0        | 文件最大查看次数。0 表示无限制。                                            |
+| remark            | string | 否   | 空       | 文件备注信息。                                                              |
+| password          | string | 否   | 空       | 访问密码，设置后需要密码才能访问文件。                                      |
+| use_proxy         | string | 否   | "1"      | 是否使用代理访问。"1"表示使用代理，"0"表示直接访问 S3。                     |
+| override          | string | 否   | "false"  | 是否覆盖同名 slug 的已存在文件。"true"表示覆盖，"false"表示不覆盖。         |
+| original_filename | string | 否   | "false"  | 是否使用原始文件名存储。"true"表示使用原始文件名，"false"表示添加随机前缀。 |
 
 ## 请求头
 
@@ -83,7 +84,8 @@ https://{域名}/api/upload-direct/{filename}
 
     // 其他信息
     "use_proxy": 1, // 是否使用代理
-    "created_by": "admin:1" // 创建者信息
+    "created_by": "admin:1", // 创建者信息
+    "used_original_filename": true // 是否使用了原始文件名
   },
   "success": true
 }
@@ -169,9 +171,19 @@ curl -X PUT "https://your-domain.com/api/upload-direct/image.jpg?max_views=5&rem
   --data-binary @/path/to/image.jpg
 ```
 
+### 使用原始文件名上传文件
+
+```bash
+curl -X PUT "https://your-domain.com/api/upload-direct/important-document.docx?original_filename=true" \
+  -H "Authorization: ApiKey YOUR_API_KEY" \
+  -H "Content-Type: application/vnd.openxmlformats-officedocument.wordprocessingml.document" \
+  --data-binary @/path/to/important-document.docx
+```
+
 ## 注意事项
 
 1. **预签名 URL**: 返回的直接访问 URL 是预签名的，有效期为 1 小时。
 2. **MIME 类型**: 如果未提供 Content-Type 或提供了通用类型(application/octet-stream)，系统会根据文件扩展名推断 MIME 类型。
 3. **S3 服务商兼容性**: 系统针对不同 S3 服务商(如 AWS S3、Backblaze B2、Cloudflare R2)进行了特殊处理，确保上传过程的兼容性。
 4. **文件覆盖**: 使用`override=true`参数可以覆盖已存在的同名 slug 文件。覆盖过程会删除旧文件并上传新文件，保持相同的访问链接。
+5. **原始文件名**: 使用`original_filename=true`参数时，系统将使用原始文件名存储文件，不添加随机前缀。多次上传同名文件的情况下，会直接覆盖。

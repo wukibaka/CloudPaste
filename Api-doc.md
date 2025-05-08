@@ -208,11 +208,20 @@
   - 响应：文件内容（下载），包含 Content-Disposition: attachment 头
 
 - `GET /api/file-view/:slug`
+
   - 描述：预览文件（浏览器内查看）
   - 参数：slug - 文件短链接
   - 查询参数：
     - `password` - 如果文件受密码保护，需提供密码
   - 响应：文件内容（预览），包含 Content-Disposition: inline 头
+
+- `GET /api/office-preview/:slug`
+  - 描述：获取 Office 文件的预览 URL
+  - 参数：slug - 文件短链接
+  - 查询参数：
+    - `password` - 如果文件受密码保护，需提供密码
+  - 响应：JSON 格式的预签名 URL，用于 Microsoft Office 在线查看服务
+  - 注意：此 API 不直接返回文件内容，而是返回用于重定向到 Microsoft Office 在线预览服务的 URL
 
 #### 公共文件查询和验证
 

@@ -1,7 +1,7 @@
 import { DbTables } from "../constants/index.js";
 import { ApiStatus } from "../constants/index.js";
 import { createErrorResponse, generateFileId, generateShortId, getSafeFileName, getFileNameAndExt, formatFileSize, getLocalTimeString } from "../utils/common.js";
-import { getMimeType } from "../utils/fileUtils.js";
+import { getMimeType, getMimeTypeFromFilename, getFileExtension } from "../utils/fileUtils.js";
 import { generatePresignedPutUrl, buildS3Url, deleteFileFromS3, generatePresignedUrl, createS3Client } from "../utils/s3Utils.js";
 import { validateAdminToken } from "../services/adminService.js";
 import { checkAndDeleteExpiredApiKey } from "../services/apiKeyService.js";
@@ -288,7 +288,7 @@ export function registerS3UploadRoutes(app) {
       const storagePath = folderPath + customPath + shortId + "-" + safeFileName + fileExt;
 
       // 获取内容类型
-      const mimetype = body.mimetype || getMimeType(body.filename);
+      const mimetype = body.mimetype || getMimeTypeFromFilename(body.filename);
 
       // 获取加密密钥
       const encryptionSecret = c.env.ENCRYPTION_SECRET || "default-encryption-key";
@@ -880,6 +880,8 @@ export function registerS3UploadRoutes(app) {
       const maxViews = c.req.query("max_views") ? parseInt(c.req.query("max_views")) : 0;
       // 添加 override 参数
       const override = c.req.query("override") === "true";
+      // 添加 original_filename 参数，控制是否使用原始文件名
+      const useOriginalFilename = c.req.query("original_filename") === "true";
 
       // 生成文件ID和唯一Slug
       const fileId = generateFileId();
@@ -950,10 +952,10 @@ export function registerS3UploadRoutes(app) {
 
       // 如果没有Content-Type或者是通用类型，则根据文件扩展名推断
       if (!contentType || contentType === "application/octet-stream") {
-        contentType = getMimeType(filename);
+        contentType = getMimeTypeFromFilename(filename);
       }
 
-      console.log(`文件上传 - 文件名: ${filename}, Content-Type: ${contentType}`);
+      console.log(`文件上传 - 文件名: ${filename}, Content-Type: ${contentType}, 使用原始文件名: ${useOriginalFilename}`);
 
       // 处理文件名
       const { name: fileName, ext: fileExt } = getFileNameAndExt(filename);
@@ -965,8 +967,8 @@ export function registerS3UploadRoutes(app) {
       // 获取默认文件夹路径
       const folderPath = s3Config.default_folder ? (s3Config.default_folder.endsWith("/") ? s3Config.default_folder : s3Config.default_folder + "/") : "";
 
-      // 组合最终路径
-      const storagePath = folderPath + customPath + shortId + "-" + safeFileName + fileExt;
+      // 组合最终路径 - 根据useOriginalFilename决定是否添加随机ID
+      const storagePath = folderPath + customPath + (useOriginalFilename ? "" : shortId + "-") + safeFileName + fileExt;
 
       // 获取加密密钥
       const encryptionSecret = c.env.ENCRYPTION_SECRET || "default-encryption-key";
@@ -1130,9 +1132,9 @@ export function registerS3UploadRoutes(app) {
       // 清除与文件相关的缓存
       await clearCacheForFilePath(db, storagePath, s3ConfigId);
 
-      // 生成预签名URL (有效期1小时)
-      const previewDirectUrl = await generatePresignedUrl(s3Config, storagePath, encryptionSecret, 3600, false);
-      const downloadDirectUrl = await generatePresignedUrl(s3Config, storagePath, encryptionSecret, 3600, true);
+      // 生成预签名URL (有效期1小时)，传递MIME类型以确保正确的Content-Type
+      const previewDirectUrl = await generatePresignedUrl(s3Config, storagePath, encryptionSecret, 3600, false, contentType);
+      const downloadDirectUrl = await generatePresignedUrl(s3Config, storagePath, encryptionSecret, 3600, true, contentType);
 
       // 构建API路径URL
       const baseUrl = c.req.url.split("/api/")[0];
@@ -1171,6 +1173,8 @@ export function registerS3UploadRoutes(app) {
           // 其他信息
           use_proxy: useProxy,
           created_by: authorizedBy === "admin" ? adminId : authorizedBy === "apikey" ? `apikey:${apiKeyId}` : null,
+          // 是否使用了原始文件名
+          used_original_filename: useOriginalFilename,
         },
         success: true,
       });

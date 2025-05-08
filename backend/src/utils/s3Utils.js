@@ -7,6 +7,7 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { ConfiguredRetryStrategy } from "@smithy/util-retry";
 import { decryptValue } from "./crypto.js";
 import { S3ProviderTypes } from "../constants/index.js";
+import { getMimeTypeGroup, MIME_GROUPS, getMimeTypeFromFilename, getFileExtension, shouldUseTextPlainForPreview, getContentTypeAndDisposition } from "./fileUtils.js";
 
 /**
  * 创建S3客户端
@@ -181,9 +182,10 @@ export async function generatePresignedPutUrl(s3Config, storagePath, mimetype, e
  * @param {string} encryptionSecret - 用于解密凭证的密钥
  * @param {number} expiresIn - URL过期时间（秒），默认为1小时
  * @param {boolean} forceDownload - 是否强制下载（而非预览）
+ * @param {string} mimetype - 文件的MIME类型（可选）
  * @returns {Promise<string>} 预签名URL
  */
-export async function generatePresignedUrl(s3Config, storagePath, encryptionSecret, expiresIn = 3600, forceDownload = false) {
+export async function generatePresignedUrl(s3Config, storagePath, encryptionSecret, expiresIn = 3600, forceDownload = false, mimetype = null) {
   try {
     // 创建S3客户端
     const s3Client = await createS3Client(s3Config, encryptionSecret);
@@ -194,16 +196,29 @@ export async function generatePresignedUrl(s3Config, storagePath, encryptionSecr
     // 提取文件名，用于Content-Disposition头
     const fileName = normalizedPath.split("/").pop();
 
+    // 如果未提供MIME类型，从文件名推断
+    let effectiveMimetype = mimetype;
+    if (!effectiveMimetype || effectiveMimetype === "application/octet-stream") {
+      effectiveMimetype = getMimeTypeFromFilename(fileName);
+      console.log(`未提供MIME类型或为通用类型，从文件名[${fileName}]推断MIME类型: ${effectiveMimetype}`);
+    }
+
     // 创建GetObjectCommand
     const commandParams = {
       Bucket: s3Config.bucket_name,
       Key: normalizedPath,
     };
 
-    // 如果需要强制下载，添加相应的响应头
-    if (forceDownload) {
-      commandParams.ResponseContentDisposition = `attachment; filename="${encodeURIComponent(fileName)}"`;
-    }
+    // 使用统一的函数获取内容类型和处置方式
+    const { contentType, contentDisposition } = getContentTypeAndDisposition({
+      filename: fileName,
+      mimetype: effectiveMimetype,
+      forceDownload: forceDownload,
+    });
+
+    // 设置S3预签名URL的内容类型和处置方式
+    commandParams.ResponseContentType = contentType;
+    commandParams.ResponseContentDisposition = contentDisposition;
 
     // 针对特定服务商添加额外参数
     switch (s3Config.provider_type) {

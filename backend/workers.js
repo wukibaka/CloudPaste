@@ -140,6 +140,13 @@ export default {
         return await handleFileDownload(slug, env, request, false); // 预览
       }
 
+      // 处理Office预览URL请求 /api/office-preview/:slug
+      if (pathParts.length >= 4 && pathParts[1] === "api" && pathParts[2] === "office-preview") {
+        const slug = pathParts[3];
+        // 将请求转发到API应用，它会路由到fileViewRoutes中的/api/office-preview/:slug处理器
+        return app.fetch(request, bindings, ctx);
+      }
+
       // 处理原始文本内容请求 /api/raw/:slug
       if (pathParts.length >= 4 && pathParts[1] === "api" && pathParts[2] === "raw") {
         // 将请求转发到API应用，它会路由到userPasteRoutes中的/api/raw/:slug处理器

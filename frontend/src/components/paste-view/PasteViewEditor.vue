@@ -1,7 +1,7 @@
 <script setup>
 // PasteViewEditor组件 - 提供Markdown编辑及相关配置功能
 // 该组件使用Vditor作为编辑器，允许用户修改内容并设置过期时间等元数据
-import { ref, onMounted, watch, onBeforeUnmount } from "vue";
+import { ref, onMounted, watch, onBeforeUnmount, nextTick } from "vue";
 import Vditor from "vditor";
 import "vditor/dist/index.css";
 import { getInputClasses, debugLog } from "./PasteViewUtils";
@@ -11,6 +11,8 @@ import markdownToWord from "../../utils/markdownToWord";
 import { saveAs } from "file-saver";
 // 导入HTML转图片工具
 import htmlToImage from "../../utils/htmlToImage";
+// 导入clipboard工具
+import { copyToClipboard as clipboardCopy } from "@/utils/clipboard";
 
 // 定义组件接收的属性
 const props = defineProps({
@@ -49,10 +51,15 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  // 是否为纯文本模式
+  isPlainTextMode: {
+    type: Boolean,
+    default: false,
+  },
 });
 
 // 定义组件可触发的事件
-const emit = defineEmits(["save", "cancel", "update:error"]);
+const emit = defineEmits(["save", "cancel", "update:error", "update:isPlainTextMode"]);
 
 // 编辑器实例引用
 const vditorInstance = ref(null);
@@ -65,6 +72,13 @@ const editForm = ref({
   password: "", // 新增密码字段
   clearPassword: false, // 新增是否清除密码的标志
 });
+
+// 纯文本模式变量
+const isPlainTextMode = ref(props.isPlainTextMode);
+// 纯文本内容
+const plainTextContent = ref("");
+// 原始纯文本内容（保留格式）
+const originalPlainTextContent = ref("");
 
 // 密码可见性控制
 const showPassword = ref(false);
@@ -79,6 +93,107 @@ const lastCopyFormatsBtnElement = ref(null);
 // 添加markdownImporter的ref引用
 const markdownImporter = ref(null);
 
+// 监听父组件传入的isPlainTextMode变化
+watch(
+  () => props.isPlainTextMode,
+  (newMode) => {
+    if (newMode !== isPlainTextMode.value) {
+      isPlainTextMode.value = newMode;
+    }
+  }
+);
+
+// 同步isPlainTextMode变化到父组件
+watch(
+  () => isPlainTextMode.value,
+  (newMode) => {
+    emit("update:isPlainTextMode", newMode);
+  }
+);
+
+// 切换编辑器模式
+const toggleEditorMode = () => {
+  // 保存当前内容
+  let currentContent = "";
+
+  if (isPlainTextMode.value) {
+    // 从纯文本切换到Markdown模式
+    currentContent = plainTextContent.value;
+
+    // 保存原始纯文本内容，以便切换回来时恢复
+    originalPlainTextContent.value = plainTextContent.value;
+
+    // 先切换模式标志
+    isPlainTextMode.value = false;
+
+    // 使用nextTick确保DOM已更新
+    nextTick(() => {
+      console.log("开始初始化Markdown编辑器...");
+
+      // 强制销毁和重新初始化编辑器
+      if (vditorInstance.value) {
+        try {
+          if (vditorInstance.value.destroy) {
+            vditorInstance.value.destroy();
+          }
+        } catch (e) {
+          console.error("销毁编辑器时出错:", e);
+        }
+        vditorInstance.value = null;
+      }
+
+      // 等待DOM更新后初始化编辑器
+      setTimeout(() => {
+        initEditor();
+
+        // 初始化完成后设置内容
+        setTimeout(() => {
+          if (vditorInstance.value && vditorInstance.value.setValue) {
+            console.log("设置Markdown编辑器内容");
+            vditorInstance.value.setValue(currentContent || "");
+          } else {
+            console.error("编辑器初始化失败或未找到setValue方法");
+          }
+        }, 200);
+      }, 100);
+    });
+  } else {
+    // 从Markdown切换到纯文本模式
+    if (vditorInstance.value && vditorInstance.value.getValue) {
+      try {
+        currentContent = vditorInstance.value.getValue();
+
+        // 如果有保存的原始纯文本内容，优先使用它
+        if (originalPlainTextContent.value) {
+          console.log("恢复原始纯文本内容");
+          plainTextContent.value = originalPlainTextContent.value;
+        } else {
+          // 否则使用编辑器的当前内容
+          console.log("使用编辑器当前内容作为纯文本");
+          plainTextContent.value = currentContent;
+        }
+      } catch (e) {
+        console.error("获取编辑器内容时出错:", e);
+        // 出错时保留当前纯文本内容
+      }
+    }
+
+    // 切换模式标志
+    isPlainTextMode.value = true;
+  }
+};
+
+// 同步纯文本内容到编辑器
+const syncContentFromPlainText = () => {
+  // 同时更新原始纯文本内容，保留格式
+  originalPlainTextContent.value = plainTextContent.value;
+
+  if (vditorInstance.value && vditorInstance.value.setValue) {
+    // 只有在编辑器实例存在时才更新
+    vditorInstance.value.setValue(plainTextContent.value);
+  }
+};
+
 // 切换密码可见性
 const togglePasswordVisibility = () => {
   showPassword.value = !showPassword.value;
@@ -86,43 +201,43 @@ const togglePasswordVisibility = () => {
 
 // 监听paste对象变化，更新表单数据
 watch(
-    () => props.paste,
-    (newPaste) => {
-      if (newPaste) {
-        // 初始化编辑表单数据
-        editForm.value.remark = newPaste.remark || "";
-        editForm.value.customLink = newPaste.slug || "";
-        // 密码字段重置为空字符串
-        editForm.value.password = "";
-        editForm.value.clearPassword = false;
+  () => props.paste,
+  (newPaste) => {
+    if (newPaste) {
+      // 初始化编辑表单数据
+      editForm.value.remark = newPaste.remark || "";
+      editForm.value.customLink = newPaste.slug || "";
+      // 密码字段重置为空字符串
+      editForm.value.password = "";
+      editForm.value.clearPassword = false;
 
-        // 处理过期时间 - 将ISO日期转换为选择项值
-        if (newPaste.expiresAt) {
-          const expiryDate = new Date(newPaste.expiresAt);
-          const now = new Date();
-          const diffHours = Math.round((expiryDate - now) / (1000 * 60 * 60));
+      // 处理过期时间 - 将ISO日期转换为选择项值
+      if (newPaste.expiresAt) {
+        const expiryDate = new Date(newPaste.expiresAt);
+        const now = new Date();
+        const diffHours = Math.round((expiryDate - now) / (1000 * 60 * 60));
 
-          // 根据剩余时间选择最接近的预设选项
-          if (diffHours <= 1) {
-            editForm.value.expiryTime = "1";
-          } else if (diffHours <= 24) {
-            editForm.value.expiryTime = "24";
-          } else if (diffHours <= 168) {
-            editForm.value.expiryTime = "168";
-          } else if (diffHours <= 720) {
-            editForm.value.expiryTime = "720";
-          } else {
-            editForm.value.expiryTime = "0"; // 设置为永不过期
-          }
+        // 根据剩余时间选择最接近的预设选项
+        if (diffHours <= 1) {
+          editForm.value.expiryTime = "1";
+        } else if (diffHours <= 24) {
+          editForm.value.expiryTime = "24";
+        } else if (diffHours <= 168) {
+          editForm.value.expiryTime = "168";
+        } else if (diffHours <= 720) {
+          editForm.value.expiryTime = "720";
         } else {
-          editForm.value.expiryTime = "0"; // 永不过期
+          editForm.value.expiryTime = "0"; // 设置为永不过期
         }
-
-        // 最大查看次数
-        editForm.value.maxViews = newPaste.maxViews || 0;
+      } else {
+        editForm.value.expiryTime = "0"; // 永不过期
       }
-    },
-    { immediate: true }
+
+      // 最大查看次数
+      editForm.value.maxViews = newPaste.maxViews || 0;
+    }
+  },
+  { immediate: true }
 );
 
 // 初始化Vditor编辑器，配置主题、工具栏等选项
@@ -405,22 +520,32 @@ const initEditor = () => {
 
 // 监听暗色模式变化，实时更新编辑器主题
 watch(
-    () => props.darkMode,
-    (newDarkMode) => {
-      if (vditorInstance.value) {
-        vditorInstance.value.setTheme(newDarkMode ? "dark" : "classic", newDarkMode ? "dark" : "light");
-      }
+  () => props.darkMode,
+  (newDarkMode) => {
+    if (vditorInstance.value) {
+      vditorInstance.value.setTheme(newDarkMode ? "dark" : "classic", newDarkMode ? "dark" : "light");
     }
+  }
 );
 
 // 保存编辑内容，收集所有表单数据并触发保存事件
 const saveEdit = async () => {
-  if (!vditorInstance.value) return;
+  // 根据当前模式获取内容
+  let newContent;
 
-  // 获取编辑器当前内容
-  const newContent = vditorInstance.value.getValue();
+  if (isPlainTextMode.value) {
+    // 纯文本模式下，使用plainTextContent或originalPlainTextContent
+    newContent = originalPlainTextContent.value || plainTextContent.value;
+  } else if (vditorInstance.value) {
+    // Markdown模式下，从编辑器获取内容
+    newContent = vditorInstance.value.getValue();
+  } else {
+    emit("update:error", "编辑器未初始化");
+    return;
+  }
+
   // 检查文本内容是否为空
-  if (!newContent.trim()) {
+  if (!newContent || !newContent.trim()) {
     emit("update:error", "内容不能为空");
     return;
   }
@@ -479,7 +604,9 @@ const validateMaxViews = (event) => {
 
 // 获取当前编辑内容的辅助方法
 const getCurrentContent = () => {
-  if (vditorInstance.value) {
+  if (isPlainTextMode.value) {
+    return originalPlainTextContent.value || plainTextContent.value;
+  } else if (vditorInstance.value) {
     return vditorInstance.value.getValue();
   }
   return props.content;
@@ -488,11 +615,19 @@ const getCurrentContent = () => {
 // 暴露方法供父组件调用
 defineExpose({
   getCurrentContent,
+  toggleEditorMode,
 });
 
-// 组件挂载时初始化编辑器
+// 组件挂载时初始化编辑器或纯文本内容
 onMounted(() => {
-  initEditor();
+  // 初始化纯文本内容
+  plainTextContent.value = props.content || "";
+  originalPlainTextContent.value = props.content || "";
+
+  // 根据模式初始化编辑器
+  if (!isPlainTextMode.value) {
+    initEditor();
+  }
 
   // 添加全局点击事件监听器
   document.addEventListener("click", handleGlobalClick);
@@ -511,7 +646,8 @@ onMounted(() => {
 
 // 组件卸载时销毁编辑器实例，避免内存泄漏
 onBeforeUnmount(() => {
-  if (vditorInstance.value) {
+  // 只有在非纯文本模式下才需要销毁编辑器实例
+  if (!isPlainTextMode.value && vditorInstance.value) {
     vditorInstance.value.destroy();
     vditorInstance.value = null;
   }
@@ -776,54 +912,31 @@ const exportAsPng = async () => {
   }
 };
 
-// 通用复制到剪贴板函数
-const copyToClipboard = (text, successMessage) => {
+// 将原来的copyToClipboard函数替换为以下实现
+const copyToClipboard = async (text, successMessage) => {
   if (!text) {
     emit("update:error", "没有可复制的内容");
     return;
   }
 
   try {
-    navigator.clipboard
-        .writeText(text)
-        .then(() => {
-          // 使用notification显示成功消息，而非error
-          notification.value = successMessage;
-          setTimeout(() => {
-            notification.value = "";
-          }, 3000);
-        })
-        .catch((err) => {
-          console.error("复制失败:", err);
-          emit("update:error", "复制失败，请手动选择内容复制");
-          setTimeout(() => {
-            emit("update:error", "");
-          }, 3000);
-        });
-  } catch (e) {
-    console.error("复制API不可用:", e);
-    // 降级方案：创建临时文本区域
-    const textarea = document.createElement("textarea");
-    textarea.value = text;
-    textarea.style.position = "fixed";
-    textarea.style.opacity = "0";
-    document.body.appendChild(textarea);
-    textarea.select();
-    try {
-      document.execCommand("copy");
+    const success = await clipboardCopy(text);
+
+    if (success) {
       // 使用notification显示成功消息，而非error
       notification.value = successMessage;
       setTimeout(() => {
         notification.value = "";
       }, 3000);
-    } catch (err) {
-      console.error("复制失败:", err);
-      emit("update:error", "复制失败，请手动选择内容复制");
-      setTimeout(() => {
-        emit("update:error", "");
-      }, 3000);
+    } else {
+      throw new Error("复制失败");
     }
-    document.body.removeChild(textarea);
+  } catch (e) {
+    console.error("复制失败:", e);
+    emit("update:error", "复制失败，请手动选择内容复制");
+    setTimeout(() => {
+      emit("update:error", "");
+    }, 3000);
   }
 };
 
@@ -831,11 +944,11 @@ const handleGlobalClick = (event) => {
   // 如果点击事件不是来自复制格式菜单，并且复制格式菜单可见，则关闭菜单
   const menu = document.getElementById("copyFormatMenu");
   if (
-      menu &&
-      !menu.contains(event.target) &&
-      // 更新选择器以匹配自定义按钮
-      !event.target.closest('.vditor-toolbar button[data-type="copy-formats"]') &&
-      copyFormatMenuVisible.value
+    menu &&
+    !menu.contains(event.target) &&
+    // 更新选择器以匹配自定义按钮
+    !event.target.closest('.vditor-toolbar button[data-type="copy-formats"]') &&
+    copyFormatMenuVisible.value
   ) {
     closeCopyFormatMenu();
   }
@@ -955,11 +1068,38 @@ const clearEditorContent = () => {
     <!-- 添加隐藏的文件输入控件用于导入Markdown文件 -->
     <input type="file" ref="markdownImporter" accept=".md,.markdown,.mdown,.mkd" style="display: none" @change="importMarkdownFile" />
 
+    <!-- 编辑器模式切换按钮 -->
+    <div class="mb-1 flex justify-end">
+      <button
+        class="px-1.5 py-0.5 text-xs rounded-md border transition-colors"
+        :class="darkMode ? 'bg-gray-700 hover:bg-gray-600 text-gray-200 border-gray-600' : 'bg-gray-50 hover:bg-gray-100 text-gray-700 border-gray-200'"
+        @click="toggleEditorMode"
+        :title="isPlainTextMode ? '切换到Markdown模式' : '切换到纯文本模式'"
+      >
+        <span class="inline-flex items-center">
+          <svg class="w-3 h-3 mr-0.5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 15v-4H8l4-8v4h3l-4 8z" fill="currentColor" />
+          </svg>
+          {{ isPlainTextMode ? "切换MD" : "切换TXT" }}
+        </span>
+      </button>
+    </div>
+
     <div class="editor-wrapper">
-      <!-- 编辑器区域 - Vditor实例将挂载到这个div -->
-      <div class="flex flex-col gap-4">
-        <!-- Markdown编辑器容器 -->
-        <div id="vditor-editor" class="w-full"></div>
+      <!-- 编辑器区域 -->
+      <div class="flex flex-col gap-2">
+        <!-- 纯文本编辑器 (在纯文本模式下显示) -->
+        <textarea
+          v-if="isPlainTextMode"
+          class="w-full h-[500px] p-4 font-mono text-base border rounded-lg resize-y focus:outline-none focus:ring-2"
+          :class="darkMode ? 'bg-gray-800 border-gray-700 text-gray-100 focus:ring-primary-600' : 'bg-white border-gray-300 text-gray-900 focus:ring-primary-500'"
+          v-model="plainTextContent"
+          placeholder="在此输入纯文本内容..."
+          @input="syncContentFromPlainText"
+        ></textarea>
+
+        <!-- Markdown编辑器容器 (在Markdown模式下显示) -->
+        <div v-else id="vditor-editor" class="w-full"></div>
       </div>
     </div>
 
@@ -970,12 +1110,12 @@ const clearEditorContent = () => {
         <div class="form-group">
           <label class="form-label block mb-1 text-sm font-medium" :class="darkMode ? 'text-gray-300' : 'text-gray-700'">链接后缀</label>
           <input
-              type="text"
-              class="form-input w-full rounded-md shadow-sm cursor-not-allowed opacity-75"
-              :class="getInputClasses(darkMode)"
-              placeholder="不可修改"
-              v-model="editForm.customLink"
-              disabled
+            type="text"
+            class="form-input w-full rounded-md shadow-sm cursor-not-allowed opacity-75"
+            :class="getInputClasses(darkMode)"
+            placeholder="不可修改"
+            v-model="editForm.customLink"
+            disabled
           />
           <p class="mt-1 text-xs" :class="darkMode ? 'text-gray-500' : 'text-gray-400'">后缀不可修改，仅支持字母、数字、-和_</p>
         </div>
@@ -1002,15 +1142,15 @@ const clearEditorContent = () => {
         <div class="form-group">
           <label class="form-label block mb-1 text-sm font-medium" :class="darkMode ? 'text-gray-300' : 'text-gray-700'">可打开次数(0表示无限制)</label>
           <input
-              type="number"
-              min="0"
-              step="1"
-              pattern="\d*"
-              class="form-input w-full rounded-md shadow-sm"
-              :class="getInputClasses(darkMode)"
-              placeholder="0表示无限制"
-              v-model.number="editForm.maxViews"
-              @input="validateMaxViews"
+            type="number"
+            min="0"
+            step="1"
+            pattern="\d*"
+            class="form-input w-full rounded-md shadow-sm"
+            :class="getInputClasses(darkMode)"
+            placeholder="0表示无限制"
+            v-model.number="editForm.maxViews"
+            @input="validateMaxViews"
           />
         </div>
 
@@ -1019,21 +1159,21 @@ const clearEditorContent = () => {
           <label class="form-label block mb-1 text-sm font-medium" :class="darkMode ? 'text-gray-300' : 'text-gray-700'">访问密码</label>
           <div class="flex items-center space-x-2">
             <input
-                :type="showPassword ? 'text' : 'password'"
-                class="form-input w-full rounded-md shadow-sm"
-                :class="getInputClasses(darkMode)"
-                placeholder="设置访问密码..."
-                v-model="editForm.password"
-                :disabled="editForm.clearPassword"
+              :type="showPassword ? 'text' : 'password'"
+              class="form-input w-full rounded-md shadow-sm"
+              :class="getInputClasses(darkMode)"
+              placeholder="设置访问密码..."
+              v-model="editForm.password"
+              :disabled="editForm.clearPassword"
             />
           </div>
           <div class="mt-2 flex items-center">
             <input
-                type="checkbox"
-                id="clear-password"
-                class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-                :class="darkMode ? 'bg-gray-700 border-gray-600' : ''"
-                v-model="editForm.clearPassword"
+              type="checkbox"
+              id="clear-password"
+              class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+              :class="darkMode ? 'bg-gray-700 border-gray-600' : ''"
+              v-model="editForm.clearPassword"
             />
             <label for="clear-password" class="ml-2 text-xs" :class="darkMode ? 'text-gray-400' : 'text-gray-600'"> 清除访问密码 </label>
           </div>
@@ -1047,19 +1187,19 @@ const clearEditorContent = () => {
       <div class="submit-section mt-6 flex flex-row items-center gap-4">
         <!-- 保存按钮 -->
         <button
-            @click="saveEdit"
-            class="btn-primary px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-md hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50"
-            :disabled="loading"
+          @click="saveEdit"
+          class="btn-primary px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-md hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50"
+          :disabled="loading"
         >
           {{ loading ? "保存中..." : "保存修改" }}
         </button>
 
         <!-- 取消按钮 -->
         <button
-            @click="cancelEdit"
-            class="px-4 py-2 text-sm font-medium border rounded-md transition-colors"
-            :class="darkMode ? 'border-gray-600 text-gray-300 hover:bg-gray-800' : 'border-gray-300 text-gray-700 hover:bg-gray-50'"
-            title="取消编辑并恢复原始内容"
+          @click="cancelEdit"
+          class="px-4 py-2 text-sm font-medium border rounded-md transition-colors"
+          :class="darkMode ? 'border-gray-600 text-gray-300 hover:bg-gray-800' : 'border-gray-300 text-gray-700 hover:bg-gray-50'"
+          title="取消编辑并恢复原始内容"
         >
           取消
         </button>
@@ -1075,10 +1215,10 @@ const clearEditorContent = () => {
 
     <!-- 复制格式菜单 -->
     <div
-        v-if="copyFormatMenuVisible"
-        id="copyFormatMenu"
-        class="absolute bg-white dark:bg-gray-800 rounded-lg shadow-lg py-1 z-50 border border-gray-200 dark:border-gray-700"
-        :style="{ top: `${copyFormatMenuPosition.y}px`, left: `${copyFormatMenuPosition.x}px` }"
+      v-if="copyFormatMenuVisible"
+      id="copyFormatMenu"
+      class="absolute bg-white dark:bg-gray-800 rounded-lg shadow-lg py-1 z-50 border border-gray-200 dark:border-gray-700"
+      :style="{ top: `${copyFormatMenuPosition.y}px`, left: `${copyFormatMenuPosition.x}px` }"
     >
       <div class="px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer flex items-center" @click="copyAsMarkdown">
         <svg class="h-4 w-4 mr-2" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -1092,11 +1232,11 @@ const clearEditorContent = () => {
       <div class="px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer flex items-center" @click="copyAsHTML">
         <svg class="h-4 w-4 mr-2" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
           <path
-              d="M9 16H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-4l-4 4z"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
+            d="M9 16H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-4l-4 4z"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
           />
           <path d="M8 9l3 3-3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
           <path d="M16 15l-3-3 3-3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
@@ -1152,6 +1292,14 @@ const clearEditorContent = () => {
   border-radius: 0.5rem;
   margin-bottom: 1rem;
   overflow: hidden;
+}
+
+/* 纯文本编辑区样式 */
+textarea.w-full {
+  font-family: Consolas, Monaco, "Andale Mono", "Ubuntu Mono", monospace;
+  line-height: 1.5;
+  tab-size: 4;
+  -moz-tab-size: 4;
 }
 
 /* 工具栏样式调整，适应明暗主题 */

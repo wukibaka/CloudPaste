@@ -4,7 +4,17 @@
     <input type="file" ref="markdownImporter" accept=".md,.markdown,.mdown,.mkd" style="display: none" @change="importMarkdownFile" />
 
     <div class="header mb-4 border-b pb-2" :class="darkMode ? 'border-gray-700' : 'border-gray-200'">
-      <h2 class="text-xl font-semibold">{{ $t("markdown.title") }}</h2>
+      <div class="flex justify-between items-center">
+        <h2 class="text-xl font-semibold">{{ $t("markdown.title") }}</h2>
+        <!-- 添加模式切换按钮 -->
+        <button
+            class="px-2 py-1 text-sm rounded transition-colors"
+            :class="darkMode ? 'bg-gray-700 hover:bg-gray-600 text-gray-200' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'"
+            @click="toggleEditorMode"
+        >
+          {{ isPlainTextMode ? "切换到Markdown" : "切换到纯文本" }}
+        </button>
+      </div>
     </div>
 
     <!-- 管理员权限提示 -->
@@ -27,8 +37,18 @@
     <div class="editor-wrapper">
       <!-- 编辑器区域 -->
       <div class="flex flex-col md:flex-row gap-4">
-        <!-- Markdown编辑器 -->
-        <div id="vditor" class="w-full border rounded-lg" :class="darkMode ? 'border-gray-700' : 'border-gray-200'"></div>
+        <!-- 纯文本编辑器 (在纯文本模式下显示) -->
+        <textarea
+            v-if="isPlainTextMode"
+            class="w-full h-[600px] p-4 font-mono text-base border rounded-lg resize-y focus:outline-none focus:ring-2"
+            :class="darkMode ? 'bg-gray-800 border-gray-700 text-gray-100 focus:ring-primary-600' : 'bg-white border-gray-300 text-gray-900 focus:ring-primary-500'"
+            v-model="plainTextContent"
+            placeholder="在此输入纯文本内容..."
+            @input="syncContentFromPlainText"
+        ></textarea>
+
+        <!-- Markdown编辑器 (在Markdown模式下显示) -->
+        <div v-else id="vditor" class="w-full border rounded-lg" :class="darkMode ? 'border-gray-700' : 'border-gray-200'"></div>
       </div>
     </div>
 
@@ -264,7 +284,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount, watch, defineProps, getCurrentInstance, onUnmounted } from "vue";
+import { ref, onMounted, onBeforeUnmount, watch, defineProps, getCurrentInstance, onUnmounted, nextTick } from "vue";
 import { useI18n } from "vue-i18n";
 import Vditor from "vditor";
 import "vditor/dist/index.css";
@@ -279,6 +299,7 @@ import markdownToWord from "../utils/markdownToWord";
 // 导入FileSaver用于下载文件
 import { saveAs } from "file-saver";
 import htmlToImage from "@/utils/htmlToImage";
+import { copyToClipboard as clipboardCopy } from "@/utils/clipboard";
 
 // 使用i18n
 const { t } = useI18n();
@@ -409,7 +430,16 @@ const getInputClasses = () => {
       : "bg-white border-gray-300 text-gray-900 focus:ring-primary-500 focus:border-primary-500";
 };
 
+// 初始化编辑器
 const initEditor = () => {
+  // 检查vditor容器是否存在
+  const vditorContainer = document.getElementById("vditor");
+  if (!vditorContainer) {
+    console.error("找不到vditor容器元素，无法初始化编辑器");
+    return;
+  }
+
+  console.log("找到vditor容器，开始初始化编辑器");
   const theme = props.darkMode ? "dark" : "light";
 
   // 检测是否为移动设备
@@ -680,7 +710,7 @@ const initEditor = () => {
       accept: "image/*,.zip,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx",
       token: "",
       // url: "/api/upload",
-      // linkToImgUrl: "/api/fetch?url=",
+      linkToImgUrl: "/api/fetch?url=",
       filename(name) {
         return name.replace(/\W/g, "");
       },
@@ -714,7 +744,8 @@ const initEditor = () => {
 watch(
     () => props.darkMode,
     () => {
-      if (editor) {
+      // 只有在Markdown模式下才需要处理编辑器重新初始化
+      if (!isPlainTextMode.value && editor) {
         const currentValue = editor.getValue();
         editor.destroy();
         initEditor();
@@ -730,10 +761,18 @@ watch(
 
 // 自动保存
 const autoSave = () => {
-  if (!editor || !editor.getValue) return;
-
   try {
-    const content = editor.getValue();
+    let content;
+
+    if (isPlainTextMode.value) {
+      // 在纯文本模式下，保存原始纯文本内容
+      content = originalPlainTextContent.value || plainTextContent.value;
+    } else if (editor && editor.getValue) {
+      content = editor.getValue();
+    } else {
+      return; // 如果编辑器未初始化，不执行保存
+    }
+
     localStorage.setItem("cloudpaste-content", content);
     savingStatus.value = "正在自动保存...";
     setTimeout(() => {
@@ -864,8 +903,50 @@ onMounted(async () => {
   // 先执行权限检查，确保UI正确显示
   await checkPermissionStatus();
 
-  // 然后初始化编辑器
-  initEditor();
+  // 恢复编辑器模式偏好设置
+  restoreEditorModePreference();
+  console.log("当前编辑器模式:", isPlainTextMode.value ? "纯文本模式" : "Markdown模式");
+
+  // 尝试恢复上次编辑的内容
+  const savedContent = localStorage.getItem("cloudpaste-content");
+  if (savedContent) {
+    // 同时更新纯文本内容和原始纯文本内容
+    plainTextContent.value = savedContent;
+    originalPlainTextContent.value = savedContent;
+    console.log("从本地存储恢复内容");
+  }
+
+  // 使用nextTick确保DOM已更新
+  nextTick(() => {
+    // 只有在非纯文本模式下才初始化编辑器
+    if (!isPlainTextMode.value) {
+      console.log("尝试初始化Markdown编辑器");
+
+      // 确保editor为空
+      editor = null;
+
+      // 初始化编辑器，并在回调中设置内容
+      setTimeout(() => {
+        initEditor();
+
+        // 如果有已保存的内容，设置到编辑器
+        if (savedContent && editor) {
+          setTimeout(() => {
+            try {
+              if (editor && editor.setValue) {
+                console.log("设置编辑器初始内容");
+                editor.setValue(savedContent);
+              }
+            } catch (e) {
+              console.warn("设置编辑器内容时出错:", e);
+            }
+          }, 300);
+        }
+      }, 100);
+    } else {
+      console.log("纯文本模式，不初始化编辑器");
+    }
+  });
 
   // 监听storage事件，以便在其他标签页中登录/登出时更新状态
   window.addEventListener("storage", handleStorageChange);
@@ -875,32 +956,6 @@ onMounted(async () => {
 
   // 添加窗口大小变化监听
   window.addEventListener("resize", handleResize);
-
-  // 尝试恢复上次编辑的内容
-  const savedContent = localStorage.getItem("cloudpaste-content");
-  if (savedContent && editor) {
-    setTimeout(() => {
-      try {
-        // 加强验证：确保编辑器已完全初始化并且内部属性可用
-        if (editor && editor.setValue && editor.vditor && editor.vditor.currentMode) {
-          editor.setValue(savedContent);
-        } else {
-          // 如果编辑器尚未完全初始化，再等待一段时间
-          setTimeout(() => {
-            try {
-              if (editor && editor.setValue) {
-                editor.setValue(savedContent);
-              }
-            } catch (e) {
-              console.warn("第二次尝试恢复内容时发生错误:", e);
-            }
-          }, 1000);
-        }
-      } catch (e) {
-        console.warn("恢复内容时发生错误:", e);
-      }
-    }, 800); // 增加等待时间，从500ms增加到800ms
-  }
 
   // 设置自动保存
   autoSaveInterval = setInterval(autoSave, 300000); // 5分钟
@@ -944,21 +999,24 @@ onUnmounted(() => {
     countdownTimer = null;
   }
 
-  // 销毁编辑器实例 - 添加安全检查
-  try {
-    if (editor) {
-      // 检查是否有 destroy 方法并且 element 属性存在
-      if (editor.destroy && editor.element) {
-        editor.destroy();
-      } else {
-        // 如果没有 destroy 方法或 element 不存在，手动清除引用
-        console.warn("编辑器实例状态异常，手动清除引用");
+  // 只有在非纯文本模式下才需要销毁编辑器实例
+  if (!isPlainTextMode.value) {
+    // 销毁编辑器实例 - 添加安全检查
+    try {
+      if (editor) {
+        // 检查是否有 destroy 方法并且 element 属性存在
+        if (editor.destroy && editor.element) {
+          editor.destroy();
+        } else {
+          // 如果没有 destroy 方法或 element 不存在，手动清除引用
+          console.warn("编辑器实例状态异常，手动清除引用");
+        }
+        editor = null;
       }
+    } catch (e) {
+      console.warn("销毁编辑器时发生错误:", e);
       editor = null;
     }
-  } catch (e) {
-    console.warn("销毁编辑器时发生错误:", e);
-    editor = null;
   }
 
   // 移除全局点击事件监听器
@@ -981,7 +1039,8 @@ const saveContent = async () => {
     return;
   }
 
-  const content = editor.getValue();
+  // 根据当前模式获取内容
+  const content = isPlainTextMode.value ? originalPlainTextContent.value || plainTextContent.value : editor.getValue();
   if (!content || content.trim() === "") {
     savingStatus.value = t("markdown.errorEmptyContent");
     return;
@@ -1082,25 +1141,28 @@ const startCountdown = () => {
 };
 
 // 复制分享链接到剪贴板
-const copyShareLink = () => {
+const copyShareLink = async () => {
   if (!shareLink.value) return;
 
-  navigator.clipboard
-      .writeText(shareLink.value)
-      .then(() => {
-        savingStatus.value = t("markdown.linkCopied");
-        setTimeout(() => {
-          savingStatus.value = "";
-        }, 2000);
-      })
-      .catch((err) => {
-        console.error("复制失败:", err);
-        savingStatus.value = t("markdown.copyFailed");
-      });
+  try {
+    const success = await clipboardCopy(shareLink.value);
+
+    if (success) {
+      savingStatus.value = t("markdown.linkCopied");
+      setTimeout(() => {
+        savingStatus.value = "";
+      }, 2000);
+    } else {
+      throw new Error("复制失败");
+    }
+  } catch (err) {
+    console.error("复制失败:", err);
+    savingStatus.value = t("markdown.copyFailed");
+  }
 };
 
 // 复制原始文本直链到剪贴板
-const copyRawTextLink = () => {
+const copyRawTextLink = async () => {
   if (!shareLink.value) return;
 
   // 从shareLink中提取slug
@@ -1109,18 +1171,21 @@ const copyRawTextLink = () => {
   // 构建原始文本直链URL，使用当前分享的密码（如果有）
   const rawLink = getRawPasteUrl(slug, currentSharePassword.value || null);
 
-  navigator.clipboard
-      .writeText(rawLink)
-      .then(() => {
-        savingStatus.value = t("markdown.rawLinkCopied");
-        setTimeout(() => {
-          savingStatus.value = "";
-        }, 2000);
-      })
-      .catch((err) => {
-        console.error("复制失败:", err);
-        savingStatus.value = t("markdown.copyFailed");
-      });
+  try {
+    const success = await clipboardCopy(rawLink);
+
+    if (success) {
+      savingStatus.value = t("markdown.rawLinkCopied");
+      setTimeout(() => {
+        savingStatus.value = "";
+      }, 2000);
+    } else {
+      throw new Error("复制失败");
+    }
+  } catch (err) {
+    console.error("复制失败:", err);
+    savingStatus.value = t("markdown.copyFailed");
+  }
 };
 
 // 添加对maxViews的验证函数
@@ -1366,7 +1431,7 @@ const exportWordDocument = async () => {
 };
 
 // 通用复制到剪贴板函数
-const copyToClipboard = (text, successMessage) => {
+const copyToClipboard = async (text, successMessage) => {
   if (!text) {
     savingStatus.value = "没有可复制的内容";
     setTimeout(() => {
@@ -1376,44 +1441,22 @@ const copyToClipboard = (text, successMessage) => {
   }
 
   try {
-    navigator.clipboard
-        .writeText(text)
-        .then(() => {
-          savingStatus.value = successMessage;
-          setTimeout(() => {
-            savingStatus.value = "";
-          }, 3000);
-        })
-        .catch((err) => {
-          console.error("复制失败:", err);
-          savingStatus.value = "复制失败，请手动选择内容复制";
-          setTimeout(() => {
-            savingStatus.value = "";
-          }, 3000);
-        });
-  } catch (e) {
-    console.error("复制API不可用:", e);
-    // 降级方案：创建临时文本区域
-    const textarea = document.createElement("textarea");
-    textarea.value = text;
-    textarea.style.position = "fixed";
-    textarea.style.opacity = "0";
-    document.body.appendChild(textarea);
-    textarea.select();
-    try {
-      document.execCommand("copy");
+    const success = await clipboardCopy(text);
+
+    if (success) {
       savingStatus.value = successMessage;
       setTimeout(() => {
         savingStatus.value = "";
       }, 3000);
-    } catch (err) {
-      console.error("复制失败:", err);
-      savingStatus.value = "复制失败，请手动选择内容复制";
-      setTimeout(() => {
-        savingStatus.value = "";
-      }, 3000);
+    } else {
+      throw new Error("复制失败");
     }
-    document.body.removeChild(textarea);
+  } catch (e) {
+    console.error("复制失败:", e);
+    savingStatus.value = "复制失败，请手动选择内容复制";
+    setTimeout(() => {
+      savingStatus.value = "";
+    }, 3000);
   }
 };
 
@@ -1594,10 +1637,14 @@ const exportAsPng = async () => {
 
 // 在script setup部分，添加一个清除内容的函数
 const clearEditorContent = () => {
-  if (!editor) return;
-
   // 清空编辑器内容
-  editor.setValue("");
+  if (editor) {
+    editor.setValue("");
+  }
+
+  // 同时清空纯文本内容和原始纯文本内容
+  plainTextContent.value = "";
+  originalPlainTextContent.value = "";
 
   // 显示提示信息
   savingStatus.value = t("markdown.contentCleared") || "内容已清空";
@@ -1608,8 +1655,6 @@ const clearEditorContent = () => {
 
 // 导入Markdown文件的函数
 const importMarkdownFile = (event) => {
-  if (!editor) return;
-
   const file = event.target.files[0];
   if (!file) return;
 
@@ -1637,7 +1682,7 @@ const importMarkdownFile = (event) => {
   }
 
   // 检查编辑器是否有内容
-  const currentContent = editor.getValue();
+  const currentContent = isPlainTextMode.value ? plainTextContent.value : editor ? editor.getValue() : "";
   if (currentContent && currentContent.trim() !== "") {
     if (!confirm(t("markdown.confirmOverwrite"))) {
       // 重置文件输入
@@ -1653,7 +1698,16 @@ const importMarkdownFile = (event) => {
   reader.onload = (e) => {
     try {
       const content = e.target.result;
-      editor.setValue(content);
+
+      // 更新纯文本内容和原始纯文本内容
+      plainTextContent.value = content;
+      originalPlainTextContent.value = content;
+
+      // 如果不在纯文本模式，也更新编辑器内容
+      if (!isPlainTextMode.value && editor) {
+        editor.setValue(content);
+      }
+
       savingStatus.value = t("markdown.fileImported");
       setTimeout(() => {
         savingStatus.value = "";
@@ -1686,6 +1740,171 @@ const triggerImportFile = () => {
   // 使用ref访问文件输入元素并触发点击
   if (markdownImporter.value) {
     markdownImporter.value.click();
+  }
+};
+
+// 切换编辑器模式
+const toggleEditorMode = () => {
+  // 保存当前内容
+  let currentContent = "";
+
+  if (isPlainTextMode.value) {
+    // 从纯文本切换到Markdown模式
+    currentContent = plainTextContent.value;
+
+    // 保存原始纯文本内容，以便切换回来时恢复
+    originalPlainTextContent.value = plainTextContent.value;
+
+    // 先切换模式标志
+    isPlainTextMode.value = false;
+
+    // 保存模式偏好
+    saveEditorModePreference();
+
+    // 使用nextTick确保DOM已更新
+    nextTick(() => {
+      console.log("开始初始化Markdown编辑器...");
+
+      // 强制销毁和重新初始化编辑器
+      if (editor) {
+        try {
+          if (editor.destroy) {
+            editor.destroy();
+          }
+        } catch (e) {
+          console.error("销毁编辑器时出错:", e);
+        }
+        editor = null;
+      }
+
+      // 等待DOM更新后初始化编辑器
+      setTimeout(() => {
+        initEditor();
+
+        // 初始化完成后设置内容
+        setTimeout(() => {
+          if (editor && editor.setValue) {
+            console.log("设置Markdown编辑器内容");
+            editor.setValue(currentContent || "");
+          } else {
+            console.error("编辑器初始化失败或未找到setValue方法");
+          }
+        }, 200);
+      }, 100);
+    });
+  } else {
+    // 从Markdown切换到纯文本模式
+    if (editor && editor.getValue) {
+      try {
+        currentContent = editor.getValue();
+
+        // 如果有保存的原始纯文本内容，优先使用它
+        if (originalPlainTextContent.value) {
+          console.log("恢复原始纯文本内容");
+          plainTextContent.value = originalPlainTextContent.value;
+        } else {
+          // 否则使用编辑器的当前内容
+          console.log("使用编辑器当前内容作为纯文本");
+          plainTextContent.value = currentContent;
+        }
+      } catch (e) {
+        console.error("获取编辑器内容时出错:", e);
+        // 出错时保留当前纯文本内容
+      }
+    }
+
+    // 切换模式标志
+    isPlainTextMode.value = true;
+
+    // 保存模式偏好
+    saveEditorModePreference();
+  }
+};
+
+const isPlainTextMode = ref(false);
+
+// 纯文本内容
+const plainTextContent = ref("");
+
+// 原始纯文本内容（保留格式，如首行缩进空格等）
+const originalPlainTextContent = ref("");
+
+// 同步纯文本内容到编辑器
+const syncContentFromPlainText = () => {
+  // 同时更新原始纯文本内容，保留格式
+  originalPlainTextContent.value = plainTextContent.value;
+
+  if (editor && editor.setValue) {
+    // 只有在编辑器实例存在时才更新
+    editor.setValue(plainTextContent.value);
+    // 触发自动保存计时
+    autoSaveDebounce();
+  }
+};
+
+// 从本地存储恢复编辑器模式偏好
+const restoreEditorModePreference = () => {
+  try {
+    const savedMode = localStorage.getItem("cloudpaste-editor-mode");
+    if (savedMode === "plain-text") {
+      isPlainTextMode.value = true;
+      console.log("从本地存储恢复编辑器模式: 纯文本模式");
+    } else {
+      isPlainTextMode.value = false;
+      console.log("从本地存储恢复编辑器模式: Markdown模式");
+    }
+  } catch (e) {
+    console.warn("恢复编辑器模式偏好时发生错误:", e);
+    // 默认使用Markdown模式
+    isPlainTextMode.value = false;
+  }
+};
+
+// 保存编辑器模式偏好到本地存储
+const saveEditorModePreference = () => {
+  try {
+    localStorage.setItem("cloudpaste-editor-mode", isPlainTextMode.value ? "plain-text" : "markdown");
+    console.log("保存编辑器模式偏好:", isPlainTextMode.value ? "纯文本模式" : "Markdown模式");
+  } catch (e) {
+    console.warn("保存编辑器模式偏好时发生错误:", e);
+  }
+};
+
+// 检查编辑器是否需要初始化
+const checkAndInitEditor = (content = "") => {
+  // 如果是纯文本模式，不需要初始化编辑器
+  if (isPlainTextMode.value) {
+    console.log("纯文本模式，不初始化编辑器");
+    return;
+  }
+
+  // 从纯文本模式切换到Markdown模式，总是重新初始化编辑器
+  // 确保销毁可能存在的编辑器实例
+  if (editor) {
+    try {
+      console.log("销毁现有编辑器实例");
+      if (editor.destroy) {
+        editor.destroy();
+      }
+      editor = null;
+    } catch (e) {
+      console.warn("销毁编辑器时发生错误:", e);
+      editor = null;
+    }
+  }
+
+  // 初始化新的编辑器实例
+  console.log("初始化新的编辑器实例");
+  initEditor();
+
+  // 如果有内容需要设置
+  if (content) {
+    setTimeout(() => {
+      if (editor && editor.setValue) {
+        console.log("设置初始化后的编辑器内容");
+        editor.setValue(content);
+      }
+    }, 200); // 增加延迟以确保编辑器完全初始化
   }
 };
 </script>
@@ -2253,5 +2472,25 @@ const triggerImportFile = () => {
 
 #copyFormatMenu div {
   transition: background-color 0.15s ease-in-out;
+}
+
+/* 纯文本编辑器样式 */
+.editor-wrapper textarea {
+  resize: vertical;
+  min-height: 400px;
+  font-family: Consolas, Monaco, "Andale Mono", "Ubuntu Mono", monospace;
+  line-height: 1.6;
+  tab-size: 4;
+  -moz-tab-size: 4;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.editor-wrapper textarea:focus {
+  outline: none;
+}
+
+/* 纯文本编辑器暗色模式 */
+.editor-wrapper textarea.bg-gray-800 {
+  color: #d4d4d4;
 }
 </style>

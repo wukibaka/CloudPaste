@@ -10,6 +10,7 @@ import PasteViewEditor from "./PasteViewEditor.vue";
 import { formatExpiry, debugLog } from "./PasteViewUtils";
 import { api } from "../../api";
 import { ApiStatus } from "../../api/ApiStatus";
+import { copyToClipboard } from "@/utils/clipboard";
 
 // 定义环境变量
 const isDev = import.meta.env.DEV;
@@ -45,6 +46,8 @@ const editContent = ref(""); // 编辑内容
 
 // 视图模式设置
 const viewMode = ref("preview"); // 'preview', 'outline', 'edit'
+// 纯文本模式标志 - 控制是否显示为纯文本而非渲染的Markdown
+const isPlainTextMode = ref(false);
 // 管理员权限判断
 const isAdmin = ref(false);
 // API密钥用户权限判断
@@ -465,51 +468,31 @@ const submitPassword = async () => {
 };
 
 // 复制内容到剪贴板 - 提供两种实现方式以确保兼容性
-const copyContentToClipboard = () => {
+const copyContentToClipboard = async () => {
   if (!paste.value || !paste.value.content) {
     error.value = "没有可复制的内容";
     return;
   }
 
   try {
-    // 优先使用现代Clipboard API
-    navigator.clipboard
-      .writeText(paste.value.content)
-      .then(() => {
-        error.value = "复制成功：内容已复制到剪贴板";
-        setTimeout(() => {
-          error.value = "";
-        }, 3000);
-      })
-      .catch((err) => {
-        console.error("复制失败:", err);
-        error.value = "复制失败，请手动选择内容复制";
-      });
-  } catch (e) {
-    console.error("复制API不可用:", e);
-    // 降级方案：创建临时文本区域
-    const textarea = document.createElement("textarea");
-    textarea.value = paste.value.content;
-    textarea.style.position = "fixed";
-    textarea.style.opacity = "0";
-    document.body.appendChild(textarea);
-    textarea.select();
-    try {
-      document.execCommand("copy");
+    const success = await copyToClipboard(paste.value.content);
+
+    if (success) {
       error.value = "复制成功：内容已复制到剪贴板";
       setTimeout(() => {
         error.value = "";
       }, 3000);
-    } catch (err) {
-      console.error("复制失败:", err);
-      error.value = "复制失败，请手动选择内容复制";
+    } else {
+      throw new Error("复制失败");
     }
-    document.body.removeChild(textarea);
+  } catch (e) {
+    console.error("复制失败:", e);
+    error.value = "复制失败，请手动选择内容复制";
   }
 };
 
 // 复制原始文本链接到剪贴板
-const copyRawLink = () => {
+const copyRawLink = async () => {
   if (!paste.value || !paste.value.slug) {
     error.value = "没有可复制的原始链接";
     return;
@@ -520,21 +503,19 @@ const copyRawLink = () => {
     const rawLink = getRawPasteUrl(paste.value.slug, paste.value.plain_password || null);
 
     // 复制链接到剪贴板
-    navigator.clipboard
-      .writeText(rawLink)
-      .then(() => {
-        error.value = "复制成功：原始链接已复制到剪贴板";
-        setTimeout(() => {
-          error.value = "";
-        }, 3000);
-      })
-      .catch((err) => {
-        console.error("复制失败:", err);
-        error.value = "复制原始链接失败，请手动复制";
-      });
+    const success = await copyToClipboard(rawLink);
+
+    if (success) {
+      error.value = "复制成功：原始链接已复制到剪贴板";
+      setTimeout(() => {
+        error.value = "";
+      }, 3000);
+    } else {
+      throw new Error("复制失败");
+    }
   } catch (e) {
-    console.error("复制原始链接失败:", e);
-    error.value = "复制原始链接失败，请手动复制";
+    console.error("复制失败:", e);
+    error.value = "复制失败，请手动复制原始链接";
   }
 };
 
@@ -555,6 +536,12 @@ const toggleForceEditButton = () => {
 // 切换密码可见性
 const togglePasswordVisibility = () => {
   showPassword.value = !showPassword.value;
+};
+
+// 切换纯文本/Markdown渲染模式
+const toggleTextMode = (isPlainText) => {
+  isPlainTextMode.value = isPlainText;
+  debugLog(enableDebug.value, isDev, isPlainText ? "切换到TXT模式" : "切换到MD渲染模式");
 };
 
 // 组件挂载时加载文本分享
@@ -784,6 +771,37 @@ const handleStorageChange = (e) => {
             >
               大纲
             </button>
+            <!-- 纯文本/Markdown切换按钮组 -->
+            <button
+              @click="toggleTextMode(false)"
+              class="px-3 py-1.5 text-sm font-medium"
+              :class="[
+                !isPlainTextMode
+                  ? darkMode
+                    ? 'bg-gray-700 text-white'
+                    : 'bg-gray-100 text-gray-900'
+                  : darkMode
+                  ? 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+                  : 'bg-white text-gray-700 hover:bg-gray-50',
+              ]"
+            >
+              MD
+            </button>
+            <button
+              @click="toggleTextMode(true)"
+              class="px-3 py-1.5 text-sm font-medium"
+              :class="[
+                isPlainTextMode
+                  ? darkMode
+                    ? 'bg-gray-700 text-white'
+                    : 'bg-gray-100 text-gray-900'
+                  : darkMode
+                  ? 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+                  : 'bg-white text-gray-700 hover:bg-gray-50',
+              ]"
+            >
+              TXT
+            </button>
           </div>
           <!-- 编辑模式下显示固定标题 -->
           <div v-else class="text-sm font-medium" :class="darkMode ? 'text-gray-300' : 'text-gray-700'">编辑模式 - 请使用下方按钮保存或取消</div>
@@ -854,6 +872,7 @@ const handleStorageChange = (e) => {
               <div>是否为创建者: {{ isCreator ? "是" : "否" }}</div>
               <div>强制显示编辑按钮: {{ forceShowEditButton ? "是" : "否" }}</div>
               <div>当前模式: {{ viewMode }}</div>
+              <div>显示格式: {{ isPlainTextMode ? "TXT模式" : "MD渲染模式" }}</div>
               <div>内容前20字符: {{ paste.content?.substring(0, 20) }}...</div>
               <div>创建者信息: {{ paste.created_by || "无" }}</div>
             </div>
@@ -864,7 +883,15 @@ const handleStorageChange = (e) => {
         <div class="border rounded-lg shadow-sm overflow-hidden" :class="darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-200 text-gray-900'">
           <!-- 常规预览模式 - 显示Markdown渲染结果 -->
           <div v-if="viewMode === 'preview'" class="p-6">
-            <PasteViewPreview ref="previewRef" :dark-mode="darkMode" :content="paste.content" :is-dev="isDev" :enable-debug="enableDebug" @rendered="handlePreviewRendered" />
+            <PasteViewPreview
+              ref="previewRef"
+              :dark-mode="darkMode"
+              :content="paste.content"
+              :is-dev="isDev"
+              :enable-debug="enableDebug"
+              :is-plain-text-mode="isPlainTextMode"
+              @rendered="handlePreviewRendered"
+            />
           </div>
 
           <!-- 大纲预览模式 - 左侧显示大纲，右侧显示内容 -->
@@ -880,7 +907,14 @@ const handleStorageChange = (e) => {
             >
               <template #content>
                 <div class="content-scroll flex-1 p-4 overflow-y-auto md:absolute md:inset-0">
-                  <PasteViewPreview :dark-mode="darkMode" :content="paste.content" :is-dev="isDev" :enable-debug="enableDebug" @rendered="handlePreviewRendered" />
+                  <PasteViewPreview
+                    :dark-mode="darkMode"
+                    :content="paste.content"
+                    :is-dev="isDev"
+                    :enable-debug="enableDebug"
+                    :is-plain-text-mode="isPlainTextMode"
+                    @rendered="handlePreviewRendered"
+                  />
                 </div>
               </template>
             </PasteViewOutline>

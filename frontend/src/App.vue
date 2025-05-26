@@ -83,6 +83,14 @@ onMounted(() => {
     // 确保在生产环境中默认不显示
     showEnvSwitcher.value = hasAdminToken && hasEnvParam;
   }
+
+  // 处理当前URL路径 - 确保在应用初始化时正确处理路由
+  console.log("应用初始化，处理当前URL路径:", window.location.pathname);
+  handlePathChange();
+
+  // 监听浏览器前进后退按钮事件
+  popStateListener = handlePopState;
+  window.addEventListener("popstate", popStateListener);
 });
 
 // 在beforeUnmount钩子中清除监听器
@@ -239,7 +247,10 @@ const handlePathChange = () => {
 
   // 处理其他路径，使用延迟切换
   let newPage = "home";
-  if (path === "/upload") {
+  if (path === "/" || path === "") {
+    newPage = "home";
+    console.log("检测到首页路径");
+  } else if (path === "/upload") {
     newPage = "upload";
     console.log("检测到上传页面路径");
   } else if (path === "/admin") {
@@ -269,7 +280,9 @@ const handlePathChange = () => {
     newPage = "mount-explorer";
     console.log("检测到挂载浏览页面路径");
   } else {
-    console.log("检测到首页路径");
+    // 未知路径默认导向首页
+    console.log("未知路径，默认导向首页:", path);
+    newPage = "home";
   }
 
   // 如果页面发生变化，延迟切换
@@ -296,7 +309,37 @@ let popStateListener = null;
 
 // 组件挂载时检查URL路径
 onMounted(() => {
-  // 处理当前URL路径
+  // 初始化系统主题媒体查询
+  darkModeMediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+
+  // 为媒体查询添加监听器
+  if (darkModeMediaQuery.addEventListener) {
+    darkModeMediaQuery.addEventListener("change", darkModeHandler);
+  } else {
+    // 兼容旧版浏览器
+    darkModeMediaQuery.addListener(darkModeHandler);
+  }
+
+  // 初始化主题
+  updateThemeBasedOnMode();
+
+  // 在开发环境中始终显示环境切换器
+  if (isDev) {
+    showEnvSwitcher.value = true;
+  } else {
+    // 在生产环境中，只有在明确的条件下才显示：
+    // 1. 存在管理员token
+    // 2. URL中有特定的参数 (showEnvSwitcher) 如："https://域名.com?showEnvSwitcher"
+    const hasAdminToken = !!localStorage.getItem("admin_token");
+    const urlParams = new URLSearchParams(window.location.search);
+    const hasEnvParam = urlParams.has("showEnvSwitcher");
+
+    // 确保在生产环境中默认不显示
+    showEnvSwitcher.value = hasAdminToken && hasEnvParam;
+  }
+
+  // 处理当前URL路径 - 确保在应用初始化时正确处理路由
+  console.log("应用初始化，处理当前URL路径:", window.location.pathname);
   handlePathChange();
 
   // 监听浏览器前进后退按钮事件

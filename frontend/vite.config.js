@@ -25,8 +25,7 @@ export default defineConfig(({ command, mode }) => {
     // 将环境变量作为定义注入到应用中
     define: {
       __APP_ENV__: JSON.stringify(env.VITE_APP_ENV || "production"),
-      // 使用动态import.meta.env来支持运行时环境变量
-      __BACKEND_URL__: "import.meta.env.VITE_BACKEND_URL",
+      __BACKEND_URL__: JSON.stringify(env.VITE_BACKEND_URL || ""),
     },
     server: {
       port: 3000,
@@ -52,6 +51,18 @@ export default defineConfig(({ command, mode }) => {
           },
         },
       },
+      // 添加历史模式回退配置，确保所有路径都能正确路由到 index.html
+      historyApiFallback: {
+        rewrites: [
+          { from: /^\/$/, to: "/index.html" },
+          { from: /^\/paste\/.*$/, to: "/index.html" },
+          { from: /^\/file\/.*$/, to: "/index.html" },
+          { from: /^\/admin$/, to: "/index.html" },
+          { from: /^\/upload$/, to: "/index.html" },
+          { from: /^\/mount-explorer$/, to: "/index.html" },
+          { from: /./, to: "/index.html" },
+        ],
+      },
     },
     optimizeDeps: {
       include: ["vue-i18n"],
@@ -60,8 +71,7 @@ export default defineConfig(({ command, mode }) => {
       minify: "terser",
       terserOptions: {
         compress: {
-          // 生产环境保留console.warn和console.error，方便调试环境变量问题
-          pure_funcs: ["console.log", "console.info", "console.debug"],
+          drop_console: true,
         },
       },
     },

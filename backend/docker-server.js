@@ -120,6 +120,57 @@ class SQLiteAdapter {
     };
   }
 
+  // batch方法
+  async batch(statements) {
+    logMessage("info", `执行批处理操作，共${statements.length}条语句`);
+
+    // 开始事务
+    try {
+      // 开始事务
+      await this.db.exec("BEGIN TRANSACTION");
+
+      // 执行所有语句
+      const results = [];
+      for (const statement of statements) {
+        if (typeof statement === "string") {
+          // 如果是纯SQL字符串
+          const result = await this.db.exec(statement);
+          results.push({ success: true, result });
+        } else if (statement.sql && Array.isArray(statement.params)) {
+          // 如果是{sql, params}格式
+          const result = await this.db.run(statement.sql, ...statement.params);
+          results.push({ success: true, result });
+        } else if (statement.sql && typeof statement.params === "undefined") {
+          // 只有SQL没有参数
+          const result = await this.db.run(statement.sql);
+          results.push({ success: true, result });
+        } else {
+          // 处理预处理语句的情况
+          const stmt = this.prepare(statement.text || statement.sql);
+          if (statement.params) {
+            stmt.bind(...statement.params);
+          }
+          const result = await stmt.run();
+          results.push(result);
+        }
+      }
+
+      // 提交事务
+      await this.db.exec("COMMIT");
+
+      return results;
+    } catch (error) {
+      // 发生错误，回滚事务
+      logMessage("error", "批处理执行错误，回滚事务:", { error });
+      try {
+        await this.db.exec("ROLLBACK");
+      } catch (rollbackError) {
+        logMessage("error", "事务回滚失败:", { rollbackError });
+      }
+      throw error;
+    }
+  }
+
   // 直接执行SQL语句的方法
   async exec(sql) {
     try {

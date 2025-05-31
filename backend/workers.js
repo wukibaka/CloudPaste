@@ -33,6 +33,35 @@ function getClientIp(request) {
   return ip;
 }
 
+/**
+ * 判断是否为WebDAV客户端
+ * @param {string} userAgent - 用户代理字符串
+ * @returns {boolean} 是否为WebDAV客户端
+ */
+function isWebDAVClient(userAgent) {
+  // Windows WebDAV客户端
+  if (userAgent.includes("Microsoft-WebDAV-MiniRedir") || (userAgent.includes("Windows") && userAgent.includes("WebDAV"))) {
+    return true;
+  }
+
+  // Dart WebDAV客户端 (AuthPass等)
+  if (userAgent.includes("Dart/") && userAgent.includes("dart:io")) {
+    return true;
+  }
+
+  // 常见WebDAV客户端
+  if (userAgent.includes("WebDAVLib") || userAgent.includes("WebDAVFS") || userAgent.includes("davfs") || userAgent.includes("gvfs") || userAgent.includes("WinSCP")) {
+    return true;
+  }
+
+  // MacOS客户端
+  if ((userAgent.includes("Darwin") || userAgent.includes("Mac")) && (userAgent.includes("WebDAV") || userAgent.includes("Finder"))) {
+    return true;
+  }
+
+  return false;
+}
+
 // 导出Cloudflare Workers请求处理函数
 export default {
   async fetch(request, env, ctx) {
@@ -63,6 +92,7 @@ export default {
       if (url.pathname === "/dav" || url.pathname.startsWith("/dav/")) {
         // 获取客户端IP，用于认证缓存
         const clientIp = getClientIp(request);
+        const userAgent = request.headers.get("user-agent") || "";
         console.log(`WebDAV请求在Workers环境中: ${request.method} ${url.pathname}, 客户端IP: ${clientIp}`);
 
         // 创建响应头对象
@@ -96,6 +126,32 @@ export default {
           });
         }
 
+        // 为所有WebDAV客户端添加认证挑战头
+        // 如果没有Authorization头且是WebDAV客户端，提供认证挑战
+        if (!request.headers.has("Authorization") && isWebDAVClient(userAgent)) {
+          // 对于非浏览器WebDAV客户端，总是返回401状态码和WWW-Authenticate头
+          // 这是符合标准的做法，允许客户端发送认证信息
+          console.log(`WebDAV请求: 检测到无认证WebDAV客户端，发送认证挑战`);
+
+          // 构建401响应头
+          const authHeaders = new Headers(responseHeaders);
+
+          // 根据客户端类型设置不同的WWW-Authenticate头
+          if (userAgent.includes("Dart/") && userAgent.includes("dart:io")) {
+            // Dart客户端需要更简单的认证头格式
+            console.log("WebDAV认证: 为Dart客户端提供简化的认证头");
+            authHeaders.set("WWW-Authenticate", 'Basic realm="WebDAV"');
+          } else {
+            // 默认格式，支持Basic和Bearer认证
+            authHeaders.set("WWW-Authenticate", 'Basic realm="WebDAV", Bearer realm="WebDAV"');
+          }
+
+          return new Response("Authentication required for WebDAV access", {
+            status: 401,
+            headers: authHeaders,
+          });
+        }
+
         // 为其他WebDAV请求添加IP信息以支持认证缓存
         // 创建带有客户端IP信息的新请求对象
         const requestWithIP = new Request(request, {
@@ -110,7 +166,7 @@ export default {
         const ctxWithIP = {
           ...ctx,
           clientIp: clientIp,
-          userAgent: request.headers.get("user-agent") || "",
+          userAgent: userAgent,
         };
 
         const response = await app.fetch(requestWithIP, bindings, ctxWithIP);

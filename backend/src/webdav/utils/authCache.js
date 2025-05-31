@@ -12,12 +12,32 @@ const authCache = new Map();
 const CACHE_EXPIRATION = 30 * 60 * 1000; // 30分钟
 
 /**
- * 判断是否为Windows WebDAV客户端
+ * 判断是否为WebDAV客户端
  * @param {string} userAgent - 用户代理字符串
- * @returns {boolean} 是否为Windows客户端
+ * @returns {boolean} 是否为WebDAV客户端
  */
-function isWindowsClient(userAgent) {
-  return userAgent.includes("Microsoft-WebDAV-MiniRedir") || (userAgent.includes("Windows") && userAgent.includes("WebDAV"));
+function isWebDAVClient(userAgent) {
+  // Windows WebDAV客户端
+  if (userAgent.includes("Microsoft-WebDAV-MiniRedir") || (userAgent.includes("Windows") && userAgent.includes("WebDAV"))) {
+    return true;
+  }
+
+  // Dart WebDAV客户端 (AuthPass等)
+  if (userAgent.includes("Dart/") && userAgent.includes("dart:io")) {
+    return true;
+  }
+
+  // 常见WebDAV客户端
+  if (userAgent.includes("WebDAVLib") || userAgent.includes("WebDAVFS") || userAgent.includes("davfs") || userAgent.includes("gvfs") || userAgent.includes("WinSCP")) {
+    return true;
+  }
+
+  // MacOS客户端
+  if ((userAgent.includes("Darwin") || userAgent.includes("Mac")) && (userAgent.includes("WebDAV") || userAgent.includes("Finder"))) {
+    return true;
+  }
+
+  return false;
 }
 
 /**
@@ -39,8 +59,8 @@ function generateCacheKey(clientIp, userAgent) {
  * @param {Object} authInfo - 认证信息
  */
 export function storeAuthInfo(clientIp, userAgent, authInfo) {
-  // 只为Windows客户端缓存认证信息
-  if (!isWindowsClient(userAgent)) {
+  // 为所有WebDAV客户端缓存认证信息
+  if (!isWebDAVClient(userAgent)) {
     return;
   }
 
@@ -50,7 +70,7 @@ export function storeAuthInfo(clientIp, userAgent, authInfo) {
     timestamp: Date.now(),
   });
 
-  console.log(`WebDAV认证缓存: 已存储 (${clientIp.substring(0, 10)}, Windows客户端)`);
+  console.log(`WebDAV认证缓存: 已存储 (${clientIp.substring(0, 10)}, ${userAgent.substring(0, 20)}...)`);
 
   // 定期清理过期缓存
   cleanExpiredCache();
@@ -63,8 +83,8 @@ export function storeAuthInfo(clientIp, userAgent, authInfo) {
  * @returns {Object|null} 认证信息或null
  */
 export function getAuthInfo(clientIp, userAgent) {
-  // 只为Windows客户端使用认证缓存
-  if (!isWindowsClient(userAgent)) {
+  // 为所有WebDAV客户端使用认证缓存
+  if (!isWebDAVClient(userAgent)) {
     return null;
   }
 
@@ -73,13 +93,13 @@ export function getAuthInfo(clientIp, userAgent) {
 
   // 检查缓存是否存在且未过期
   if (cached && Date.now() - cached.timestamp < CACHE_EXPIRATION) {
-    console.log(`WebDAV认证缓存: 命中 (${clientIp.substring(0, 10)}, Windows客户端)`);
+    console.log(`WebDAV认证缓存: 命中 (${clientIp.substring(0, 10)}, ${userAgent.substring(0, 20)}...)`);
     return cached.authInfo;
   }
 
   // 如果过期，删除缓存
   if (cached) {
-    console.log(`WebDAV认证缓存: 已过期 (${clientIp.substring(0, 10)}, Windows客户端)`);
+    console.log(`WebDAV认证缓存: 已过期 (${clientIp.substring(0, 10)}, ${userAgent.substring(0, 20)}...)`);
     authCache.delete(key);
   }
 
@@ -115,3 +135,6 @@ export function getCacheStats() {
     expirationMinutes: CACHE_EXPIRATION / (60 * 1000),
   };
 }
+
+// 导出客户端类型检测函数，供其他模块使用
+export { isWebDAVClient };

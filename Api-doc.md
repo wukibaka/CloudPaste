@@ -674,6 +674,19 @@
     - `force_download` - 是否强制下载，true 或 false（默认 false）
   - 响应：包含预签名 URL 的对象，可直接访问或分享
 
+- `POST /api/admin/fs/update`
+
+  - 描述：更新文件内容或创建新文件
+  - 授权：需要管理员令牌
+  - 请求体：
+    ```json
+    {
+      "path": "文件路径", // 必填，包含文件名
+      "content": "文件内容" // 必填，文件的新内容
+    }
+    ```
+  - 响应：更新结果，包含文件路径、ETag、内容类型和是否为新创建的文件
+
 - `POST /api/admin/fs/presign`
 
   - 描述：获取管理员预签名上传 URL，用于直接上传文件到存储系统
@@ -704,6 +717,56 @@
     }
     ```
   - 响应：文件上传完成状态和文件信息
+
+- `POST /api/admin/fs/batch-copy`
+
+  - 描述：批量复制文件或目录
+  - 授权：需要管理员令牌
+  - 请求体：
+    ```json
+    {
+      "items": [
+        // 必填，要复制的项目数组
+        {
+          "sourcePath": "源路径1", // 必填，源文件或目录路径
+          "targetPath": "目标路径1" // 必填，目标文件或目录路径
+        },
+        {
+          "sourcePath": "源路径2",
+          "targetPath": "目标路径2"
+        }
+      ],
+      "skipExisting": true // 可选，是否跳过已存在的文件，默认为true
+    }
+    ```
+  - 响应：批量复制结果，包含成功、跳过和失败的项目数量
+  - 特殊情况：如果涉及跨存储复制（不同存储类型之间的复制），响应中会包含`requiresClientSideCopy`标志和`crossStorageResults`数组，客户端需要执行额外的复制操作
+
+- `POST /api/admin/fs/batch-copy-commit`
+
+  - 描述：提交批量跨存储复制完成信息
+  - 授权：需要管理员令牌
+  - 请求体：
+    ```json
+    {
+      "targetMountId": "目标挂载点ID", // 必填
+      "files": [
+        // 必填，已复制文件列表
+        {
+          "targetPath": "目标路径1", // 必填
+          "s3Path": "S3存储路径1", // 必填
+          "contentType": "文件MIME类型", // 可选
+          "fileSize": 1024000, // 可选，文件大小（字节）
+          "etag": "文件ETag" // 可选
+        },
+        {
+          "targetPath": "目标路径2",
+          "s3Path": "S3存储路径2"
+        }
+      ]
+    }
+    ```
+  - 响应：提交结果，包含成功和失败的文件数量
 
 #### 文件夹和文件操作 - API 密钥用户版本
 
@@ -803,6 +866,19 @@
     - `force_download` - 是否强制下载，true 或 false（默认 false）
   - 响应：包含预签名 URL 的对象，可直接访问或分享
 
+- `POST /api/user/fs/update`
+
+  - 描述：更新文件内容或创建新文件
+  - 授权：需要有文件权限的 API 密钥
+  - 请求体：
+    ```json
+    {
+      "path": "文件路径", // 必填，包含文件名
+      "content": "文件内容" // 必填，文件的新内容
+    }
+    ```
+  - 响应：更新结果，包含文件路径、ETag、内容类型和是否为新创建的文件
+
 - `POST /api/user/fs/presign`
 
   - 描述：获取用户预签名上传 URL，用于直接上传文件到存储系统
@@ -816,6 +892,56 @@
   - 授权：需要有文件权限的 API 密钥
   - 请求体：格式同管理员版本
   - 响应：文件上传完成状态和文件信息
+
+- `POST /api/user/fs/batch-copy`
+
+  - 描述：批量复制文件或目录
+  - 授权：需要有文件权限的 API 密钥
+  - 请求体：
+    ```json
+    {
+      "items": [
+        // 必填，要复制的项目数组
+        {
+          "sourcePath": "源路径1", // 必填，源文件或目录路径
+          "targetPath": "目标路径1" // 必填，目标文件或目录路径
+        },
+        {
+          "sourcePath": "源路径2",
+          "targetPath": "目标路径2"
+        }
+      ],
+      "skipExisting": true // 可选，是否跳过已存在的文件，默认为true
+    }
+    ```
+  - 响应：批量复制结果，包含成功、跳过和失败的项目数量
+  - 特殊情况：如果涉及跨存储复制（不同存储类型之间的复制），响应中会包含`requiresClientSideCopy`标志和`crossStorageResults`数组，客户端需要执行额外的复制操作
+
+- `POST /api/user/fs/batch-copy-commit`
+
+  - 描述：提交批量跨存储复制完成信息
+  - 授权：需要有文件权限的 API 密钥
+  - 请求体：
+    ```json
+    {
+      "targetMountId": "目标挂载点ID", // 必填
+      "files": [
+        // 必填，已复制文件列表
+        {
+          "targetPath": "目标路径1", // 必填
+          "s3Path": "S3存储路径1", // 必填
+          "contentType": "文件MIME类型", // 可选
+          "fileSize": 1024000, // 可选，文件大小（字节）
+          "etag": "文件ETag" // 可选
+        },
+        {
+          "targetPath": "目标路径2",
+          "s3Path": "S3存储路径2"
+        }
+      ]
+    }
+    ```
+  - 响应：提交结果，包含成功和失败的文件数量
 
 #### 分片上传 API - 管理员版本
 

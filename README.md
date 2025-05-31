@@ -8,6 +8,14 @@
     <h3>Cloudflare-based online clipboard and file sharing service with Markdown editing and file upload support</h3>
 </div>
 
+<div align="center">
+    <a href="https://deepwiki.com/ling-drag0n/CloudPaste"><img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki"></a>
+    <a href="./LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" alt="License"></a>
+    <a href="https://github.com/ling-drag0n/CloudPaste/stargazers"><img src="https://img.shields.io/github/stars/ling-drag0n/CloudPaste.svg" alt="GitHub Stars"></a>
+    <a href="https://www.cloudflare.com/"><img src="https://img.shields.io/badge/Powered%20by-Cloudflare-F38020?logo=cloudflare" alt="Powered by Cloudflare"></a>
+    <a href="https://hub.docker.com/r/dragon730/cloudpaste-backend"><img src="https://img.shields.io/docker/pulls/dragon730/cloudpaste-backend.svg" alt="Docker Pulls"></a>
+</div>
+
 <p align="center">
   <a href="#-showcase">📸 Showcase</a> •
   <a href="#-features">✨ Features</a> •
@@ -615,6 +623,126 @@ b2.exe bucket update <bucketName> allPrivate --cors-rules "[{\"corsRuleName\":\"
 Replace <bucketName> with your bucket name. For allowedOrigins in the cross-origin allowance, you can configure based on your needs; here it allows all.
 
 5. Cross-origin configuration complete
+
+## MinIO API Access and Cross-Origin Configuration
+
+1. **Deploy MinIO Server**
+
+   Use the following Docker Compose configuration (reference) to quickly deploy MinIO:
+
+   ```yaml  
+   version: '3'  
+
+   services:  
+     minio:  
+       image: minio/minio:RELEASE.2025-02-18T16-25-55Z  
+       container_name: minio-server  
+       command: server /data --console-address :9001 --address :9000  
+       environment:  
+         - MINIO_ROOT_USER=minioadmin        # Admin username  
+         - MINIO_ROOT_PASSWORD=minioadmin    # Admin password  
+         - MINIO_BROWSER=on  
+         - MINIO_SERVER_URL=https://minio.example.com    # S3 API access URL  
+         - MINIO_BROWSER_REDIRECT_URL=https://console.example.com  # Console access URL  
+       ports:  
+         - "9000:9000"  # S3 API port  
+         - "9001:9001"  # Console port  
+       volumes:  
+         - ./data:/data  
+         - ./certs:/root/.minio/certs  # SSL certificates (if needed)  
+       restart: always  
+   ```  
+
+   Run `docker-compose up -d` to start the service.
+
+2. **Configure Reverse Proxy (Reference)**
+
+   To ensure MinIO functions correctly, especially file previews, configure reverse proxy properly. Recommended OpenResty/Nginx settings:
+
+   **MinIO S3 API Reverse Proxy (minio.example.com)**:
+
+   ```nginx  
+   location / {  
+       proxy_pass http://127.0.0.1:9000;  
+       proxy_set_header Host $host;  
+       proxy_set_header X-Real-IP $remote_addr;  
+       proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;  
+       proxy_set_header X-Forwarded-Proto $scheme;  
+         
+       # HTTP optimization  
+       proxy_http_version 1.1;  
+       proxy_set_header Connection "";  # Enable HTTP/1.1 keepalive  
+         
+       # Critical: Resolve 403 errors & preview issues  
+       proxy_cache off;  
+       proxy_buffering off;  
+       proxy_request_buffering off;  
+         
+       # No file size limit  
+       client_max_body_size 0;  
+   }  
+   ```  
+
+   **MinIO Console Reverse Proxy (console.example.com)**:
+
+   ```nginx  
+   location / {  
+       proxy_pass http://127.0.0.1:9001;  
+       proxy_set_header Host $host;  
+       proxy_set_header X-Real-IP $remote_addr;  
+       proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;  
+       proxy_set_header X-Forwarded-Proto $scheme;  
+         
+       # WebSocket support  
+       proxy_http_version 1.1;  
+       proxy_set_header Upgrade $http_upgrade;  
+       proxy_set_header Connection "upgrade";  
+         
+       # Critical settings  
+       proxy_cache off;  
+       proxy_buffering off;  
+         
+       # No file size limit  
+       client_max_body_size 0;  
+   }  
+   ```  
+
+3. **Access Console to Create Buckets & Access Keys**
+
+   For detailed configuration, refer to official docs:  
+   https://min.io/docs/minio/container/index.html  
+   CN: https://min-io.cn/docs/minio/container/index.html
+
+   ![minio-1](./images/minio-1.png)
+
+4. **Additional Configuration (Optional)**
+
+   Allowed origins must include your frontend domain.  
+   ![minio-2](./images/minio-2.png)
+
+5. **Configure MinIO in CloudPaste**
+
+   - Log in to CloudPaste admin panel
+   - Go to "S3 Storage Settings" → "Add Storage Configuration"
+   - Select "Other S3-compatible service" as provider
+   - Enter details:
+      - Name: Custom name
+      - Endpoint URL: MinIO service URL (e.g., `https://minio.example.com`)
+      - Bucket Name: Pre-created bucket
+      - Access Key ID: Your Access Key
+      - Secret Key: Your Secret Key
+      - Region: Leave empty
+      - Path-Style Access: MUST ENABLE!
+   - Click "Test Connection" to verify
+   - Save settings
+
+6. **Troubleshooting**
+
+   - **Note**: If using Cloudflare's CDN, you may need to add `proxy_set_header Accept-Encoding "identity"`, and there are caching issues to consider. It is recommended to use only DNS resolution.
+   - **403 Error**: Ensure reverse proxy includes `proxy_cache off` & `proxy_buffering off`
+   - **Preview Issues**: Verify `MINIO_SERVER_URL` & `MINIO_BROWSER_REDIRECT_URL` are correctly set
+   - **Upload Failures**: Check CORS settings; allowed origins must include frontend domain
+   - **Console Unreachable**: Verify WebSocket config, especially `Connection "upgrade"`
 
 ## More S3-related configurations to come......
 

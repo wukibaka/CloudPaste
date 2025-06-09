@@ -141,6 +141,7 @@ Before starting deployment, please ensure you have prepared the following:
 - [Manual Deployment](#Manual-Deployment)
    - [Backend Manual Deployment](#Backend-Manual-Deployment)
    - [Frontend Manual Deployment](#Frontend-Manual-Deployment)
+- [ClawCloud CloudPaste Deployment Tutorial](#ClawCloud-CloudPaste-Deployment-Tutorial)
 
 ---
 
@@ -308,7 +309,8 @@ cd CloudPaste/backend
    ```bash
    npm run build
    ```
- [Be careful when building! !](https://github.com/ling-drag0n/CloudPaste/issues/6#issuecomment-2818746354)
+
+   [Be careful when building! !](https://github.com/ling-drag0n/CloudPaste/issues/6#issuecomment-2818746354)
 
 4. Deploy to Cloudflare Pages
 
@@ -351,6 +353,38 @@ cd CloudPaste/backend
    ```
 
    Follow the prompts to configure the project.
+
+---
+
+## ClawCloud CloudPaste Deployment Tutorial
+
+#### 10GB free traffic per month, suitable for light usage only
+
+###### Step 1:
+
+Registration link: [Claw Cloud](https://ap-northeast-1.run.claw.cloud/signin) (no #AFF)
+No credit card required, as long as your GitHub registration date is more than 180 days, you get $5 credit every month.
+
+###### Step 2:
+
+After registration, click APP Launchpad on the homepage, then click create app in the upper right corner
+
+![image.png](https://s2.loli.net/2025/04/21/soj5eWMhxTg1VFt.png)
+
+###### Step 3:
+
+First deploy the backend, as shown in the figure (for reference only):
+![image.png](https://s2.loli.net/2025/04/21/AHrMnuVyNhK6eUk.png)
+
+Backend data storage is here:
+![image.png](https://s2.loli.net/2025/04/21/ANaoU5Y6cxPOVfw.png)
+
+###### Step 4:
+
+Then the frontend, as shown in the figure (for reference only):
+![image.png](https://s2.loli.net/2025/04/21/kaT5Qu8ctovFdUp.png)
+
+##### Deployment is complete and ready to use, custom domain names can be configured as needed
 
 </details>
 
@@ -525,7 +559,7 @@ server {
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         client_max_body_size 0;
-        
+
         # WebSocket support (if needed)
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
@@ -604,20 +638,20 @@ server {
 
    ![B21](./images/B2/B2-4.png)
 
-Regarding option 3 configuration, since the panel cannot configure it, you need to configure manually by [downloading B2 CLI](https://www.backblaze.com/docs/cloud-storage-command-line-tools) tool. For more details, refer to: "https://docs.cloudreve.org/use/policy/s3#backblaze-b2".
+Regarding option 3 configuration, since the panel cannot configure it, you need to configure manually by [downloading B2 CLI](https://www.backblaze.com/docs/cloud-storage-command-line-tools) tool. For more details, refer to: "https://docs.cloudreve.org/zh/usage/storage/b2".
 
 After downloading, in the corresponding download directory CMD, enter the following commands:
 
 ```txt
-b2.exe account authorize   //Log in to your account, following prompts to enter your keyID and applicationKey
-b2.exe bucket get <bucketName> //You can execute to get bucket information, replace <bucketName> with your bucket name
+b2-windows.exe account authorize   //Log in to your account, following prompts to enter your keyID and applicationKey
+b2-windows.exe bucket get <bucketName> //You can execute to get bucket information, replace <bucketName> with your bucket name
 ```
 
-Windows configuration, Use ".\b2-windows.exe xxx", 
+Windows configuration, Use ".\b2-windows.exe xxx",
 Python CLI would be similar:
 
 ```cmd
-b2.exe bucket update <bucketName> allPrivate --cors-rules "[{\"corsRuleName\":\"CloudPaste\",\"allowedOrigins\":[\"*\"],\"allowedHeaders\":[\"*\"],\"allowedOperations\":[\"b2_upload_file\",\"b2_download_file_by_name\",\"b2_download_file_by_id\",\"s3_head\",\"s3_get\",\"s3_put\",\"s3_post\",\"s3_delete\"],\"exposeHeaders\":[\"Etag\",\"content-length\",\"content-type\",\"x-bz-content-sha1\"],\"maxAgeSeconds\":3600}]"
+b2-windows.exe bucket update <bucketName> allPrivate --cors-rules "[{\"corsRuleName\":\"CloudPaste\",\"allowedOrigins\":[\"*\"],\"allowedHeaders\":[\"*\"],\"allowedOperations\":[\"b2_upload_file\",\"b2_download_file_by_name\",\"b2_download_file_by_id\",\"s3_head\",\"s3_get\",\"s3_put\",\"s3_post\",\"s3_delete\"],\"exposeHeaders\":[\"Etag\",\"content-length\",\"content-type\",\"x-bz-content-sha1\"],\"maxAgeSeconds\":3600}]"
 ```
 
 Replace <bucketName> with your bucket name. For allowedOrigins in the cross-origin allowance, you can configure based on your needs; here it allows all.
@@ -630,28 +664,28 @@ Replace <bucketName> with your bucket name. For allowedOrigins in the cross-orig
 
    Use the following Docker Compose configuration (reference) to quickly deploy MinIO:
 
-   ```yaml  
-   version: '3'  
+   ```yaml
+   version: "3"
 
-   services:  
-     minio:  
-       image: minio/minio:RELEASE.2025-02-18T16-25-55Z  
-       container_name: minio-server  
-       command: server /data --console-address :9001 --address :9000  
-       environment:  
-         - MINIO_ROOT_USER=minioadmin        # Admin username  
-         - MINIO_ROOT_PASSWORD=minioadmin    # Admin password  
-         - MINIO_BROWSER=on  
-         - MINIO_SERVER_URL=https://minio.example.com    # S3 API access URL  
-         - MINIO_BROWSER_REDIRECT_URL=https://console.example.com  # Console access URL  
-       ports:  
-         - "9000:9000"  # S3 API port  
-         - "9001:9001"  # Console port  
-       volumes:  
-         - ./data:/data  
-         - ./certs:/root/.minio/certs  # SSL certificates (if needed)  
-       restart: always  
-   ```  
+   services:
+     minio:
+       image: minio/minio:RELEASE.2025-02-18T16-25-55Z
+       container_name: minio-server
+       command: server /data --console-address :9001 --address :9000
+       environment:
+         - MINIO_ROOT_USER=minioadmin # Admin username
+         - MINIO_ROOT_PASSWORD=minioadmin # Admin password
+         - MINIO_BROWSER=on
+         - MINIO_SERVER_URL=https://minio.example.com # S3 API access URL
+         - MINIO_BROWSER_REDIRECT_URL=https://console.example.com # Console access URL
+       ports:
+         - "9000:9000" # S3 API port
+         - "9001:9001" # Console port
+       volumes:
+         - ./data:/data
+         - ./certs:/root/.minio/certs # SSL certificates (if needed)
+       restart: always
+   ```
 
    Run `docker-compose up -d` to start the service.
 
@@ -661,51 +695,51 @@ Replace <bucketName> with your bucket name. For allowedOrigins in the cross-orig
 
    **MinIO S3 API Reverse Proxy (minio.example.com)**:
 
-   ```nginx  
-   location / {  
-       proxy_pass http://127.0.0.1:9000;  
-       proxy_set_header Host $host;  
-       proxy_set_header X-Real-IP $remote_addr;  
-       proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;  
-       proxy_set_header X-Forwarded-Proto $scheme;  
-         
-       # HTTP optimization  
-       proxy_http_version 1.1;  
-       proxy_set_header Connection "";  # Enable HTTP/1.1 keepalive  
-         
-       # Critical: Resolve 403 errors & preview issues  
-       proxy_cache off;  
-       proxy_buffering off;  
-       proxy_request_buffering off;  
-         
-       # No file size limit  
-       client_max_body_size 0;  
-   }  
-   ```  
+   ```nginx
+   location / {
+       proxy_pass http://127.0.0.1:9000;
+       proxy_set_header Host $host;
+       proxy_set_header X-Real-IP $remote_addr;
+       proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+       proxy_set_header X-Forwarded-Proto $scheme;
+
+       # HTTP optimization
+       proxy_http_version 1.1;
+       proxy_set_header Connection "";  # Enable HTTP/1.1 keepalive
+
+       # Critical: Resolve 403 errors & preview issues
+       proxy_cache off;
+       proxy_buffering off;
+       proxy_request_buffering off;
+
+       # No file size limit
+       client_max_body_size 0;
+   }
+   ```
 
    **MinIO Console Reverse Proxy (console.example.com)**:
 
-   ```nginx  
-   location / {  
-       proxy_pass http://127.0.0.1:9001;  
-       proxy_set_header Host $host;  
-       proxy_set_header X-Real-IP $remote_addr;  
-       proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;  
-       proxy_set_header X-Forwarded-Proto $scheme;  
-         
-       # WebSocket support  
-       proxy_http_version 1.1;  
-       proxy_set_header Upgrade $http_upgrade;  
-       proxy_set_header Connection "upgrade";  
-         
-       # Critical settings  
-       proxy_cache off;  
-       proxy_buffering off;  
-         
-       # No file size limit  
-       client_max_body_size 0;  
-   }  
-   ```  
+   ```nginx
+   location / {
+       proxy_pass http://127.0.0.1:9001;
+       proxy_set_header Host $host;
+       proxy_set_header X-Real-IP $remote_addr;
+       proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+       proxy_set_header X-Forwarded-Proto $scheme;
+
+       # WebSocket support
+       proxy_http_version 1.1;
+       proxy_set_header Upgrade $http_upgrade;
+       proxy_set_header Connection "upgrade";
+
+       # Critical settings
+       proxy_cache off;
+       proxy_buffering off;
+
+       # No file size limit
+       client_max_body_size 0;
+   }
+   ```
 
 3. **Access Console to Create Buckets & Access Keys**
 

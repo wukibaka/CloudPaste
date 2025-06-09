@@ -12,6 +12,7 @@ import {
   getMimeTypeAndGroupFromFile,
   shouldUseTextPlainForPreview,
   getContentTypeAndDisposition,
+  isOfficeFile,
 } from "../utils/fileUtils.js";
 
 /**
@@ -51,10 +52,13 @@ async function isFileAccessible(db, file, encryptionSecret) {
   }
 
   // 检查文件是否过期
-  if (file.expires_at && new Date(file.expires_at) < new Date()) {
-    // 文件已过期，执行删除
-    await checkAndDeleteExpiredFile(db, file, encryptionSecret);
-    return { accessible: false, reason: "expired" };
+  if (file.expires_at) {
+    const now = new Date().toISOString();
+    if (file.expires_at < now) {
+      // 文件已过期，执行删除
+      await checkAndDeleteExpiredFile(db, file, encryptionSecret);
+      return { accessible: false, reason: "expired" };
+    }
   }
 
   // 检查最大查看次数
@@ -81,8 +85,8 @@ async function checkAndDeleteExpiredFile(db, file, encryptionSecret) {
     let isExpired = false;
     const now = new Date();
 
-    // 检查是否过期
-    if (file.expires_at && new Date(file.expires_at) < now) {
+    // 检查是否过期 - 使用字符串比较更准确
+    if (file.expires_at && file.expires_at < now.toISOString()) {
       isExpired = true;
     }
 
@@ -129,7 +133,7 @@ async function checkAndDeleteExpiredFile(db, file, encryptionSecret) {
  */
 async function incrementAndCheckFileViews(db, file, encryptionSecret) {
   // 首先递增访问计数
-  await db.prepare(`UPDATE ${DbTables.FILES} SET views = views + 1, updated_at = ? WHERE id = ?`).bind(new Date().toISOString(), file.id).run();
+  await db.prepare(`UPDATE ${DbTables.FILES} SET views = views + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).bind(file.id).run();
 
   // 重新获取更新后的文件信息
   const updatedFile = await db
@@ -161,35 +165,6 @@ async function incrementAndCheckFileViews(db, file, encryptionSecret) {
     isExpired: false,
     file: updatedFile,
   };
-}
-
-/**
- * 检查文件是否为Office文件类型
- * @param {string} mimetype - MIME类型
- * @param {string} filename - 文件名
- * @returns {boolean} 是否为Office文件
- */
-function isOfficeFile(mimetype, filename) {
-  const mime = (mimetype || "").toLowerCase();
-  const name = (filename || "").toLowerCase();
-
-  return (
-      mime.includes("wordprocessing") ||
-      mime.includes("spreadsheet") ||
-      mime.includes("presentation") ||
-      mime === "application/msword" ||
-      mime === "application/vnd.ms-excel" ||
-      mime === "application/vnd.ms-powerpoint" ||
-      name.endsWith(".doc") ||
-      name.endsWith(".docx") ||
-      name.endsWith(".xls") ||
-      name.endsWith(".xlsx") ||
-      name.endsWith(".ppt") ||
-      name.endsWith(".pptx") ||
-      name.endsWith(".odt") ||
-      name.endsWith(".ods") ||
-      name.endsWith(".odp")
-  );
 }
 
 /**

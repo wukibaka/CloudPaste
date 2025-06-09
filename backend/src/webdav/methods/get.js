@@ -6,7 +6,7 @@ import { findMountPointByPath, normalizeS3SubPath, updateMountLastUsed } from ".
 import { createS3Client } from "../../utils/s3Utils.js";
 import { GetObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
 import { handleWebDAVError, createWebDAVErrorResponse } from "../utils/errorUtils.js";
-import { getMimeType } from "../../utils/fileUtils.js";
+import { getMimeTypeFromFilename } from "../../utils/fileUtils.js";
 
 /**
  * 处理GET请求
@@ -20,8 +20,8 @@ export async function handleGet(c, path, userId, userType, db) {
   const isHead = c.req.method === "HEAD";
 
   try {
-    // 使用统一函数查找挂载点
-    const mountResult = await findMountPointByPath(db, path, userId, userType);
+    // 使用统一函数查找挂载点 - GET/HEAD使用读取权限
+    const mountResult = await findMountPointByPath(db, path, userId, userType, "read");
 
     // 处理错误情况
     if (mountResult.error) {
@@ -56,9 +56,10 @@ export async function handleGet(c, path, userId, userType, db) {
       const headCommand = new HeadObjectCommand(headParams);
       const headResponse = await s3Client.send(headCommand);
 
-      // 获取文件名以确定更准确的内容类型
+      // 获取文件名并统一从文件名推断MIME类型
       const fileName = path.split("/").pop();
-      const contentType = headResponse.ContentType || getMimeType(fileName) || "application/octet-stream";
+      const contentType = getMimeTypeFromFilename(fileName);
+      console.log(`WebDAV GET - 从文件名[${fileName}]推断MIME类型: ${contentType}`);
 
       // 获取ETag和Last-Modified用于条件请求
       const etag = headResponse.ETag || "";
@@ -288,5 +289,4 @@ export async function handleGet(c, path, userId, userType, db) {
     // 使用统一的错误处理
     return handleWebDAVError("GET", error);
   }
-
 }

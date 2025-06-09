@@ -9,19 +9,19 @@ import { initializeMultipartUpload, uploadPart, completeMultipartUpload, abortMu
 /**
  * 从Hono上下文中获取用户ID和类型
  * @param {HonoContext} c - Hono上下文
- * @returns {Object} 包含userId和userType的对象
+ * @returns {Object} 包含userIdOrInfo和userType的对象
  */
 async function getUserIdAndTypeFromContext(c) {
   // 检查上下文中是否存在adminId (由authMiddleware设置)
   const adminId = c.get("adminId");
   if (adminId) {
-    return { userId: adminId, userType: "admin" };
+    return { userIdOrInfo: adminId, userType: "admin" };
   }
 
-  // 检查上下文中是否存在apiKeyId (由apiKeyMiddleware设置)
-  const apiKeyId = c.get("apiKeyId");
-  if (apiKeyId) {
-    return { userId: apiKeyId, userType: "apiKey" };
+  // 检查上下文中是否存在apiKeyInfo (由apiKeyMiddleware设置)
+  const apiKeyInfo = c.get("apiKeyInfo");
+  if (apiKeyInfo) {
+    return { userIdOrInfo: apiKeyInfo, userType: "apiKey" };
   }
 
   // 如果两者都不存在，则抛出未授权错误
@@ -52,7 +52,7 @@ export async function handleInitMultipartUpload(c) {
     const db = getDatabase(c);
 
     // 从上下文获取用户ID和类型
-    const { userId, userType } = await getUserIdAndTypeFromContext(c);
+    const { userIdOrInfo, userType } = await getUserIdAndTypeFromContext(c);
 
     // 获取请求参数
     const { path, contentType, fileSize, filename } = await c.req.json();
@@ -62,8 +62,8 @@ export async function handleInitMultipartUpload(c) {
       throw new HTTPException(ApiStatus.BAD_REQUEST, { message: "路径不能为空" });
     }
 
-    // 初始化分片上传
-    const result = await initializeMultipartUpload(db, path, contentType || "application/octet-stream", fileSize, userId, userType, c.env.ENCRYPTION_SECRET, filename);
+    // 初始化分片上传（后端会统一从文件名推断MIME类型，不依赖前端传来的contentType）
+    const result = await initializeMultipartUpload(db, path, null, fileSize, userIdOrInfo, userType, c.env.ENCRYPTION_SECRET, filename);
 
     // 返回初始化信息
     return c.json({
@@ -89,7 +89,7 @@ export async function handleUploadPart(c) {
     const db = getDatabase(c);
 
     // 从上下文获取用户ID和类型
-    const { userId, userType } = await getUserIdAndTypeFromContext(c);
+    const { userIdOrInfo, userType } = await getUserIdAndTypeFromContext(c);
 
     // 获取请求参数
     const path = c.req.query("path");
@@ -121,7 +121,7 @@ export async function handleUploadPart(c) {
     // S3会合并这些小分片，只要最终能成功上传即可
 
     // 上传分片
-    const result = await uploadPart(db, path, uploadId, partNumber, partData, userId, userType, c.env.ENCRYPTION_SECRET, s3Key);
+    const result = await uploadPart(db, path, uploadId, partNumber, partData, userIdOrInfo, userType, c.env.ENCRYPTION_SECRET, s3Key);
 
     // 返回分片上传结果
     return c.json({
@@ -147,7 +147,7 @@ export async function handleCompleteMultipartUpload(c) {
     const db = getDatabase(c);
 
     // 从上下文获取用户ID和类型
-    const { userId, userType } = await getUserIdAndTypeFromContext(c);
+    const { userIdOrInfo, userType } = await getUserIdAndTypeFromContext(c);
 
     // 获取请求参数
     const { path, uploadId, parts, key, contentType, fileSize } = await c.req.json();
@@ -157,18 +157,18 @@ export async function handleCompleteMultipartUpload(c) {
       throw new HTTPException(ApiStatus.BAD_REQUEST, { message: "缺少必要参数或参数无效" });
     }
 
-    // 完成分片上传
+    // 完成分片上传（后端会统一从文件名推断MIME类型，不依赖前端传来的contentType）
     const result = await completeMultipartUpload(
-      db,
-      path,
-      uploadId,
-      parts,
-      userId,
-      userType,
-      c.env.ENCRYPTION_SECRET,
-      key,
-      contentType || "application/octet-stream", // 添加MIME类型
-      fileSize || 0 // 添加文件大小
+        db,
+        path,
+        uploadId,
+        parts,
+        userIdOrInfo,
+        userType,
+        c.env.ENCRYPTION_SECRET,
+        key,
+        null, // 不传递MIME类型，让后端统一推断
+        fileSize || 0
     );
 
     // 返回完成结果
@@ -195,7 +195,7 @@ export async function handleAbortMultipartUpload(c) {
     const db = getDatabase(c);
 
     // 从上下文获取用户ID和类型
-    const { userId, userType } = await getUserIdAndTypeFromContext(c);
+    const { userIdOrInfo, userType } = await getUserIdAndTypeFromContext(c);
 
     // 获取请求参数
     const { path, uploadId, key } = await c.req.json();
@@ -206,7 +206,7 @@ export async function handleAbortMultipartUpload(c) {
     }
 
     // 中止分片上传
-    const result = await abortMultipartUpload(db, path, uploadId, userId, userType, c.env.ENCRYPTION_SECRET, key);
+    const result = await abortMultipartUpload(db, path, uploadId, userIdOrInfo, userType, c.env.ENCRYPTION_SECRET, key);
 
     // 返回中止结果
     return c.json({

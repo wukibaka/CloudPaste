@@ -1,6 +1,9 @@
 <template>
-  <div v-if="isOpen" class="fixed inset-0 z-50 overflow-auto bg-black bg-opacity-50 flex items-center justify-center">
-    <div class="relative w-full max-w-lg bg-white dark:bg-gray-800 rounded-lg shadow-xl" :class="darkMode ? 'bg-gray-800' : 'bg-white'">
+  <div v-if="isOpen" class="fixed inset-0 z-[60] overflow-auto bg-black bg-opacity-50 flex items-center justify-center p-2 sm:p-4 pt-20 sm:pt-4">
+    <div
+        class="relative w-full max-w-sm sm:max-w-lg bg-white dark:bg-gray-800 rounded-lg shadow-xl max-h-[85vh] sm:max-h-[80vh] overflow-hidden"
+        :class="darkMode ? 'bg-gray-800' : 'bg-white'"
+    >
       <!-- 标题栏 -->
       <div class="px-4 py-3 border-b flex justify-between items-center" :class="darkMode ? 'border-gray-700' : 'border-gray-200'">
         <h3 class="text-lg font-medium" :class="darkMode ? 'text-gray-100' : 'text-gray-900'">选择目标文件夹</h3>
@@ -12,7 +15,7 @@
       </div>
 
       <!-- 内容区 -->
-      <div class="p-4">
+      <div class="p-3 sm:p-4 overflow-y-auto" style="max-height: calc(85vh - 140px)">
         <!-- 已选项目信息 -->
         <div class="mb-3 text-sm" :class="darkMode ? 'text-gray-300' : 'text-gray-600'">
           已选择: {{ selectedItems.length }} 个项目 ({{ selectedItems.filter((item) => item.isDirectory).length }} 个文件夹,
@@ -28,17 +31,17 @@
         <div v-if="pathWarning" class="mb-3 p-2 bg-yellow-50 dark:bg-yellow-900/30 border border-yellow-200 dark:border-yellow-700 rounded-md">
           <div class="flex items-start">
             <svg
-              class="h-5 w-5 text-yellow-500 dark:text-yellow-400 mt-0.5 mr-2 flex-shrink-0"
-              xmlns="http://www.w3.org/2000/svg"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
+                class="h-5 w-5 text-yellow-500 dark:text-yellow-400 mt-0.5 mr-2 flex-shrink-0"
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
             >
               <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
               />
             </svg>
             <span class="text-sm text-yellow-700 dark:text-yellow-300">{{ pathWarning }}</span>
@@ -52,9 +55,9 @@
             <svg class="animate-spin h-5 w-5 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
               <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
               <path
-                class="opacity-75"
-                fill="currentColor"
-                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                  class="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
               ></path>
             </svg>
             <span>加载中...</span>
@@ -64,24 +67,24 @@
             <!-- 目录树结构 -->
             <div class="file-tree">
               <!-- 根目录 -->
-              <div class="tree-item" :class="{ selected: currentPath === '/' }" @click="selectDestination('/')">
+              <div class="tree-item" :class="{ selected: currentPath === userBasicPath }" @click="selectDestination(userBasicPath)">
                 <div class="flex items-center py-2 px-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer">
                   <svg
-                    class="h-4 w-4 flex-shrink-0 mr-2"
-                    :class="darkMode ? 'text-blue-400' : 'text-blue-600'"
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke-width="2"
-                    stroke="currentColor"
+                      class="h-4 w-4 flex-shrink-0 mr-2"
+                      :class="darkMode ? 'text-blue-400' : 'text-blue-600'"
+                      xmlns="http://www.w3.org/2000/svg"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke-width="2"
+                      stroke="currentColor"
                   >
                     <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"
                     />
                   </svg>
-                  <span class="truncate" :class="darkMode ? 'text-gray-200' : 'text-gray-700'">根目录</span>
+                  <span class="truncate" :class="darkMode ? 'text-gray-200' : 'text-gray-700'">{{ rootDisplayName }}</span>
                 </div>
               </div>
 
@@ -96,17 +99,17 @@
         <!-- 操作按钮 -->
         <div class="flex justify-end space-x-3">
           <button
-            @click="closeModal"
-            class="px-4 py-2 text-sm font-medium rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-300"
-            :class="darkMode ? 'bg-gray-700 text-gray-200 hover:bg-gray-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
+              @click="closeModal"
+              class="px-4 py-2 text-sm font-medium rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-300"
+              :class="darkMode ? 'bg-gray-700 text-gray-200 hover:bg-gray-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
           >
             取消
           </button>
           <button
-            @click="confirmCopy"
-            class="px-4 py-2 text-sm font-medium rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-            :class="[darkMode ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-blue-600 hover:bg-blue-700 text-white', copying ? 'opacity-70 cursor-not-allowed' : '']"
-            :disabled="copying"
+              @click="confirmCopy"
+              class="px-4 py-2 text-sm font-medium rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              :class="[darkMode ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-blue-600 hover:bg-blue-700 text-white', copying ? 'opacity-70 cursor-not-allowed' : '']"
+              :disabled="copying"
           >
             {{ copying ? "复制中..." : "确认复制" }}
           </button>
@@ -118,7 +121,7 @@
 
 <script setup>
 import { ref, watch, computed, shallowRef } from "vue";
-import { getFsApiByUserType } from "../../api/fsService";
+import { api } from "../../api";
 import { useTaskManager, TaskType, TaskStatus } from "../../utils/taskManager";
 
 // 使用Vue 3的方式注册递归组件
@@ -153,24 +156,24 @@ const DirectoryItemVue = {
     },
   },
   emits: ["select"],
-  setup(props, { emit, slots }) {
+  setup(props, { emit }) {
     const expanded = ref(false);
     const children = shallowRef([]);
     const loading = ref(false);
 
     // 监听当前路径变化
     watch(
-      () => props.currentPath,
-      (newPath) => {
-        // 如果当前路径是此节点的子路径，自动展开
-        if (newPath.startsWith(props.item.path + "/") && newPath !== props.item.path + "/") {
-          expanded.value = true;
-          if (children.value.length === 0) {
-            loadChildren();
+        () => props.currentPath,
+        (newPath) => {
+          // 如果当前路径是此节点的子路径，自动展开
+          if (newPath.startsWith(props.item.path + "/") && newPath !== props.item.path + "/") {
+            expanded.value = true;
+            if (children.value.length === 0) {
+              loadChildren();
+            }
           }
-        }
-      },
-      { immediate: true }
+        },
+        { immediate: true }
     );
 
     // 计算是否被选中
@@ -242,150 +245,150 @@ const DirectoryItemVue = {
     // 使用渲染函数代替模板，以确保递归组件正确渲染
     return h("div", { class: "directory-item" }, [
       h(
-        "div",
-        {
-          class: ["tree-item", { selected: this.isSelected }],
-          onClick: this.selectFolder,
-        },
-        [
-          h(
-            "div",
-            {
-              class: "flex items-center py-2 px-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer",
-              style: { paddingLeft: `${this.level * 0.75 + 0.5}rem` }, // 增加层级缩进值
-            },
-            [
-              h(
+          "div",
+          {
+            class: ["tree-item", { selected: this.isSelected }],
+            onClick: this.selectFolder,
+          },
+          [
+            h(
                 "div",
                 {
-                  class: "folder-toggle",
-                  onClick: (e) => {
-                    e.stopPropagation();
-                    this.toggleExpand(e);
-                  },
+                  class: "flex items-center py-2 px-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer",
+                  style: { paddingLeft: `${this.level * 0.75 + 0.5}rem` }, // 增加层级缩进值
                 },
                 [
-                  this.expanded
-                    ? h(
-                        "svg",
-                        {
-                          class: "h-4 w-4",
-                          xmlns: "http://www.w3.org/2000/svg",
-                          fill: "none",
-                          viewBox: "0 0 24 24",
-                          stroke: "currentColor",
-                          "stroke-width": "2",
+                  h(
+                      "div",
+                      {
+                        class: "folder-toggle",
+                        onClick: (e) => {
+                          e.stopPropagation();
+                          this.toggleExpand(e);
                         },
-                        [
-                          h("path", {
-                            "stroke-linecap": "round",
-                            "stroke-linejoin": "round",
-                            d: "M19 9l-7 7-7-7",
-                          }),
-                        ]
-                      )
-                    : h(
-                        "svg",
-                        {
-                          class: "h-4 w-4",
-                          xmlns: "http://www.w3.org/2000/svg",
-                          fill: "none",
-                          viewBox: "0 0 24 24",
-                          stroke: "currentColor",
-                          "stroke-width": "2",
-                        },
-                        [
-                          h("path", {
-                            "stroke-linecap": "round",
-                            "stroke-linejoin": "round",
-                            d: "M9 5l7 7-7 7",
-                          }),
-                        ]
-                      ),
-                ]
-              ),
-              h(
-                "svg",
-                {
-                  class: ["h-4 w-4 flex-shrink-0 mr-2", this.darkMode ? "text-yellow-400" : "text-yellow-600"],
-                  xmlns: "http://www.w3.org/2000/svg",
-                  fill: "none",
-                  viewBox: "0 0 24 24",
-                  stroke: "currentColor",
-                  "stroke-width": "2",
-                },
-                [
-                  h("path", {
-                    "stroke-linecap": "round",
-                    "stroke-linejoin": "round",
-                    d: "M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z",
-                  }),
-                ]
-              ),
-              h(
-                "span",
-                {
-                  class: ["truncate", this.darkMode ? "text-gray-200" : "text-gray-700"],
-                },
-                this.item.name
-              ),
-            ]
-          ),
-        ]
-      ),
-      this.expanded
-        ? h("div", { class: "folder-children" }, [
-            this.loading
-              ? h(
-                  "div",
-                  {
-                    class: "folder-loading",
-                    style: { paddingLeft: `${(this.level + 1) * 0.75 + 0.75}rem` },
-                  },
-                  [
-                    h(
+                      },
+                      [
+                        this.expanded
+                            ? h(
+                                "svg",
+                                {
+                                  class: "h-4 w-4",
+                                  xmlns: "http://www.w3.org/2000/svg",
+                                  fill: "none",
+                                  viewBox: "0 0 24 24",
+                                  stroke: "currentColor",
+                                  "stroke-width": "2",
+                                },
+                                [
+                                  h("path", {
+                                    "stroke-linecap": "round",
+                                    "stroke-linejoin": "round",
+                                    d: "M19 9l-7 7-7-7",
+                                  }),
+                                ]
+                            )
+                            : h(
+                                "svg",
+                                {
+                                  class: "h-4 w-4",
+                                  xmlns: "http://www.w3.org/2000/svg",
+                                  fill: "none",
+                                  viewBox: "0 0 24 24",
+                                  stroke: "currentColor",
+                                  "stroke-width": "2",
+                                },
+                                [
+                                  h("path", {
+                                    "stroke-linecap": "round",
+                                    "stroke-linejoin": "round",
+                                    d: "M9 5l7 7-7 7",
+                                  }),
+                                ]
+                            ),
+                      ]
+                  ),
+                  h(
                       "svg",
                       {
-                        class: "animate-spin h-3 w-3 mr-1",
+                        class: ["h-4 w-4 flex-shrink-0 mr-2", this.darkMode ? "text-yellow-400" : "text-yellow-600"],
                         xmlns: "http://www.w3.org/2000/svg",
                         fill: "none",
                         viewBox: "0 0 24 24",
+                        stroke: "currentColor",
+                        "stroke-width": "2",
                       },
                       [
-                        h("circle", {
-                          class: "opacity-25",
-                          cx: "12",
-                          cy: "12",
-                          r: "10",
-                          stroke: "currentColor",
-                          "stroke-width": "4",
-                        }),
                         h("path", {
-                          class: "opacity-75",
-                          fill: "currentColor",
-                          d: "M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z",
+                          "stroke-linecap": "round",
+                          "stroke-linejoin": "round",
+                          d: "M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z",
                         }),
                       ]
-                    ),
-                    h("span", { class: "text-xs" }, "加载中..."),
-                  ]
+                  ),
+                  h(
+                      "span",
+                      {
+                        class: ["truncate", this.darkMode ? "text-gray-200" : "text-gray-700"],
+                      },
+                      this.item.name
+                  ),
+                ]
+            ),
+          ]
+      ),
+      this.expanded
+          ? h("div", { class: "folder-children" }, [
+            this.loading
+                ? h(
+                    "div",
+                    {
+                      class: "folder-loading",
+                      style: { paddingLeft: `${(this.level + 1) * 0.75 + 0.75}rem` },
+                    },
+                    [
+                      h(
+                          "svg",
+                          {
+                            class: "animate-spin h-3 w-3 mr-1",
+                            xmlns: "http://www.w3.org/2000/svg",
+                            fill: "none",
+                            viewBox: "0 0 24 24",
+                          },
+                          [
+                            h("circle", {
+                              class: "opacity-25",
+                              cx: "12",
+                              cy: "12",
+                              r: "10",
+                              stroke: "currentColor",
+                              "stroke-width": "4",
+                            }),
+                            h("path", {
+                              class: "opacity-75",
+                              fill: "currentColor",
+                              d: "M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z",
+                            }),
+                          ]
+                      ),
+                      h("span", { class: "text-xs" }, "加载中..."),
+                    ]
                 )
-              : this.children.length === 0
-              ? null // 如果没有子目录，不显示任何内容
-              : this.children.map((child) =>
-                  h("div", { class: "folder-item", key: child.path }, [
-                    h(DirectoryItemVue, {
-                      item: child,
-                      currentPath: this.currentPath,
-                      darkMode: this.darkMode,
-                      fsApi: this.fsApi,
-                      level: this.level + 1, // 增加层级深度
-                      onSelect: (path) => this.$emit("select", path),
-                    }),
-                  ])
-                ),
+                : this.children.length === 0
+                    ? null // 如果没有子目录，不显示任何内容
+                    : this.children.map((child) =>
+                        h("div", { class: "folder-item", key: child.path }, [
+                          h(DirectoryItemVue, {
+                            item: child,
+                            currentPath: this.currentPath,
+                            darkMode: this.darkMode,
+                            fsApi: this.fsApi,
+                            level: this.level + 1, // 增加层级深度
+                            onSelect: (path) => this.$emit("select", path),
+                          }),
+                        ])
+                    ),
           ])
-        : null,
+          : null,
     ]);
   },
 };
@@ -411,12 +414,38 @@ const props = defineProps({
     type: Boolean,
     default: true,
   },
+  apiKeyInfo: {
+    type: Object,
+    default: null,
+  },
 });
 
 const emit = defineEmits(["close", "copy-complete"]);
 
 // 获取API函数
-const fsApi = getFsApiByUserType(props.isAdmin);
+const fsApi = api.fs.getUserTypeApi(props.isAdmin);
+
+// 计算用户的基本路径
+const userBasicPath = computed(() => {
+  if (props.isAdmin) {
+    return "/";
+  }
+  return props.apiKeyInfo?.basic_path || "/";
+});
+
+// 计算根路径显示名称
+const rootDisplayName = computed(() => {
+  if (props.isAdmin) {
+    return "根目录";
+  }
+  // 对于API密钥用户，显示基本路径的最后一段作为根目录名称
+  const basicPath = userBasicPath.value;
+  if (basicPath === "/") {
+    return "根目录";
+  }
+  const pathParts = basicPath.split("/").filter((part) => part);
+  return pathParts.length > 0 ? pathParts[pathParts.length - 1] : "根目录";
+});
 
 // 状态变量
 const currentPath = ref("/");
@@ -432,17 +461,17 @@ const clearDirectoryCache = () => {
 
 // 监听模态窗口打开状态
 watch(
-  () => props.isOpen,
-  (newValue) => {
-    if (newValue) {
-      // 当模态窗口打开时，加载根目录
-      currentPath.value = "/";
-      loadRootDirectories();
-    } else {
-      // 当模态窗口关闭时，清除目录缓存
-      clearDirectoryCache();
+    () => props.isOpen,
+    (newValue) => {
+      if (newValue) {
+        // 当模态窗口打开时，设置初始路径为用户的基本路径
+        currentPath.value = userBasicPath.value;
+        loadRootDirectories();
+      } else {
+        // 当模态窗口关闭时，清除目录缓存
+        clearDirectoryCache();
+      }
     }
-  }
 );
 
 // 关闭模态窗口
@@ -453,8 +482,10 @@ const closeModal = () => {
 
 // 加载根目录内容
 const loadRootDirectories = async () => {
+  const rootPath = userBasicPath.value;
+
   // 检查缓存中是否已有根目录数据
-  const cacheKey = "/";
+  const cacheKey = rootPath;
   if (directoryCache.value.has(cacheKey)) {
     rootDirectories.value = directoryCache.value.get(cacheKey);
     return;
@@ -462,7 +493,7 @@ const loadRootDirectories = async () => {
 
   loading.value = true;
   try {
-    const response = await fsApi.getDirectoryList("/");
+    const response = await fsApi.getDirectoryList(rootPath);
     if (response.success) {
       // 只显示目录
       const dirItems = response.data.items.filter((item) => item.isDirectory);
@@ -484,7 +515,28 @@ const loadRootDirectories = async () => {
 
 // 选择目标位置
 const selectDestination = (path) => {
-  const formattedPath = path.endsWith("/") ? path : path + "/";
+  // 确保路径格式正确
+  let formattedPath = path;
+  if (!formattedPath.endsWith("/")) {
+    formattedPath = formattedPath + "/";
+  }
+
+  // 对于API密钥用户，确保选择的路径在基本路径范围内
+  if (!props.isAdmin) {
+    const basicPath = userBasicPath.value;
+    const normalizedBasicPath = basicPath === "/" ? "/" : basicPath.replace(/\/+$/, "");
+    const normalizedSelectedPath = formattedPath.replace(/\/+$/, "") || "/";
+
+    // 特殊处理：如果基本路径是根目录，允许选择任何路径
+    if (normalizedBasicPath !== "/") {
+      // 检查选择的路径是否在基本路径范围内
+      if (normalizedSelectedPath !== normalizedBasicPath && !normalizedSelectedPath.startsWith(normalizedBasicPath + "/")) {
+        // 如果选择的路径不在基本路径范围内，重置为基本路径
+        formattedPath = basicPath.endsWith("/") ? basicPath : basicPath + "/";
+      }
+    }
+  }
+
   currentPath.value = formattedPath;
 
   // 清除之前的警告
@@ -607,24 +659,42 @@ const createCancelCallback = (taskManager, taskId) => {
 
 // 处理复制完成
 const handleCopyCompletion = (taskManager, taskId, response) => {
-  if (response.success) {
-    // 更新任务状态为已完成
-    taskManager.completeTask(taskId, {
-      total: props.selectedItems.length,
-      processed: props.selectedItems.length,
-    });
+  // 检查响应数据
+  const data = response.data || {};
+  const successCount = data.success || 0;
+  const skippedCount = data.skipped || 0;
+  const failedCount = (data.failed && data.failed.length) || 0;
+  const totalProcessed = successCount + skippedCount + failedCount;
 
-    // 如果是跨S3复制完成，添加相关信息
-    if (response.data && response.data.requiresClientSideCopy) {
-      taskManager.updateTaskProgress(taskId, 100, {
-        crossStorage: true,
-        successCount: response.data.success || 0,
-        failedCount: (response.data.failed && response.data.failed.length) || 0,
-      });
-    }
+  // 准备任务详情
+  const taskDetails = {
+    total: props.selectedItems.length,
+    processed: totalProcessed,
+    successCount,
+    skippedCount,
+    failedCount,
+    message: response.message,
+  };
+
+  // 如果是跨S3复制，添加相关信息
+  if (data.requiresClientSideCopy) {
+    taskDetails.crossStorage = true;
+  }
+
+  // 根据结果状态决定任务状态
+  if (response.success) {
+    // 完全成功 - 没有失败项
+    taskManager.completeTask(taskId, taskDetails);
+  } else if (successCount > 0 || skippedCount > 0) {
+    // 部分成功 - 有成功或跳过的项目，但也有失败的
+    taskManager.completeTask(taskId, {
+      ...taskDetails,
+      partialSuccess: true,
+      status: "部分完成",
+    });
   } else {
-    // 更新任务状态为失败
-    taskManager.failTask(taskId, response.message);
+    // 完全失败 - 没有成功或跳过的项目
+    taskManager.failTask(taskId, response.message, taskDetails);
   }
 };
 

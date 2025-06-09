@@ -17,12 +17,6 @@
 
 #### 基础 API
 
-- `GET /api`
-
-  - 描述：API 根路径，返回 API 基本信息
-  - 参数：无
-  - 响应：API 名称、版本和状态
-
 - `GET /api/health`
   - 描述：API 健康检查端点，用于监控服务状态
   - 参数：无
@@ -39,7 +33,17 @@
 - `GET /api/system/max-upload-size`
   - 描述：获取系统允许的最大上传文件大小
   - 参数：无
-  - 响应：包含 maxSizeMB 和 maxSizeBytes 的对象
+  - 响应：包含 max_upload_size 的对象
+    ```json
+    {
+      "code": 200,
+      "message": "获取最大上传大小成功",
+      "data": {
+        "max_upload_size": 100
+      },
+      "success": true
+    }
+    ```
 
 ### 文本分享 API
 
@@ -117,6 +121,18 @@
   - 授权：需要有文本权限的 API 密钥
   - 响应：删除结果
 
+- `POST /api/user/pastes/batch-delete`
+
+  - 描述：API 密钥用户批量删除文本
+  - 授权：需要有文本权限的 API 密钥
+  - 请求体：
+    ```json
+    {
+      "ids": ["文本ID1", "文本ID2", "文本ID3"] // 必填，要删除的文本ID数组
+    }
+    ```
+  - 响应：批量删除结果
+
 - `PUT /api/user/pastes/:slug`
   - 描述：API 密钥用户更新文本信息
   - 授权：需要有文本权限的 API 密钥
@@ -152,6 +168,32 @@
   - 描述：管理员删除所有文本
   - 授权：需要管理员令牌
   - 响应：删除结果
+
+- `POST /api/admin/pastes/batch-delete`
+
+  - 描述：管理员批量删除文本
+  - 授权：需要管理员令牌
+  - 请求体：
+    ```json
+    {
+      "ids": ["文本ID1", "文本ID2", "文本ID3"] // 必填，要删除的文本ID数组
+    }
+    ```
+  - 响应：批量删除结果
+
+- `POST /api/admin/pastes/clear-expired`
+
+  - 描述：清理过期文本分享
+  - 授权：需要管理员令牌
+  - 请求体：无
+  - 响应：清理结果
+    ```json
+    {
+      "code": 200,
+      "message": "已清理 5 个过期分享",
+      "success": true
+    }
+    ```
 
 - `PUT /api/admin/pastes/:slug`
   - 描述：管理员更新文本信息
@@ -405,6 +447,17 @@
   - 描述：测试管理员令牌有效性
   - 授权：需要管理员令牌
   - 响应：令牌有效状态
+    ```json
+    {
+      "code": 200,
+      "message": "管理员令牌验证成功",
+      "data": {
+        "valid": true,
+        "adminId": "管理员ID"
+      },
+      "success": true
+    }
+    ```
 
 - `GET /api/admin/dashboard/stats`
   - 描述：获取管理员仪表盘统计数据
@@ -430,7 +483,9 @@
       "text_permission": true, // 是否有文本权限，默认false
       "file_permission": true, // 是否有文件权限，默认false
       "mount_permission": true, // 是否有挂载权限，默认false
-      "expires_at": "2023-12-31T23:59:59Z" // 可选，过期时间
+      "expires_at": "2023-12-31T23:59:59Z", // 可选，过期时间
+      "custom_key": "custom-api-key-123", // 可选，自定义密钥值（仅限字母、数字、横杠和下划线）
+      "basic_path": "/" // 可选，基本路径权限，默认为根路径"/"
     }
     ```
   - 响应：新创建的 API 密钥信息，包含完整的密钥值（仅在创建时返回）
@@ -447,7 +502,8 @@
       "text_permission": true, // 可选
       "file_permission": false, // 可选
       "mount_permission": true, // 可选
-      "expires_at": "2023-12-31T23:59:59Z" // 可选
+      "expires_at": "2023-12-31T23:59:59Z", // 可选
+      "basic_path": "/restricted/path/" // 可选，基本路径权限
     }
     ```
   - 响应：更新后的密钥信息
@@ -462,8 +518,28 @@
 - `GET /api/test/api-key`
   - 描述：测试 API 密钥有效性
   - 授权：需要有效的 API 密钥
-  - 响应：密钥有效状态和权限信息，包含文本和文件权限状态
-    - 返回字段包括：`id`、`name`、`text`（文本权限）、`file`（文件权限）、`mount`（挂载权限）
+  - 响应：密钥有效状态和权限信息
+    ```json
+    {
+      "code": 200,
+      "message": "API密钥验证成功",
+      "data": {
+        "name": "密钥名称",
+        "basic_path": "/",
+        "permissions": {
+          "text": true,
+          "file": true,
+          "mount": false
+        },
+        "key_info": {
+          "id": "密钥ID",
+          "name": "密钥名称",
+          "basic_path": "/"
+        }
+      },
+      "success": true
+    }
+    ```
 
 ### 系统设置 API
 
@@ -485,6 +561,61 @@
     }
     ```
   - 响应：更新后的系统设置
+
+### 缓存管理 API
+
+#### 管理员缓存管理
+
+- `GET /api/admin/cache/stats`
+
+  - 描述：获取目录缓存统计信息
+  - 授权：无需授权（公开接口）
+  - 响应：缓存统计数据
+    ```json
+    {
+      "code": 200,
+      "message": "获取缓存统计成功",
+      "data": {
+        "totalEntries": 150,
+        "hitRate": 0.85,
+        "missRate": 0.15,
+        "cacheSize": "2.5MB"
+      },
+      "success": true
+    }
+    ```
+
+- `POST /api/admin/cache/clear`
+
+  - 描述：清理目录缓存
+  - 授权：需要管理员令牌
+  - 请求体：
+    ```json
+    {
+      "mountId": "挂载点ID", // 可选，清理特定挂载点的缓存
+      "s3ConfigId": "S3配置ID" // 可选，清理特定S3配置相关的缓存
+    }
+    ```
+  - 响应：清理结果
+    ```json
+    {
+      "code": 200,
+      "message": "缓存清理成功，共清理 50 项",
+      "data": {
+        "clearedCount": 50,
+        "timestamp": "2023-05-01T12:00:00Z"
+      },
+      "success": true
+    }
+    ```
+
+#### API 密钥用户缓存管理
+
+- `POST /api/user/cache/clear`
+  - 描述：API 密钥用户清理缓存
+  - 授权：需要有挂载权限的 API 密钥
+  - 请求体：格式同管理员版本
+  - 响应：清理结果
 
 ### 挂载管理 API
 
@@ -537,42 +668,25 @@
   - 参数：id - 挂载点 ID
   - 响应：删除结果
 
-#### API 密钥用户挂载点管理
+#### API 密钥用户挂载点访问
 
 - `GET /api/user/mounts`
 
-  - 描述：API 密钥用户获取自己的挂载点列表
+  - 描述：API 密钥用户获取可访问的挂载点列表（基于 basic_path 权限）
   - 授权：需要有挂载权限的 API 密钥
   - 参数：无
   - 响应：挂载点列表和详细信息
+  - 注意：只返回 API 密钥 basic_path 权限范围内的挂载点
 
 - `GET /api/user/mounts/:id`
 
-  - 描述：API 密钥用户获取单个挂载点详情
+  - 描述：API 密钥用户获取单个挂载点详情（基于 basic_path 权限）
   - 授权：需要有挂载权限的 API 密钥
   - 参数：id - 挂载点 ID
   - 响应：挂载点详细信息
+  - 注意：只能访问 API 密钥 basic_path 权限范围内的挂载点
 
-- `POST /api/user/mounts`
-
-  - 描述：API 密钥用户创建新的挂载点
-  - 授权：需要有挂载权限的 API 密钥
-  - 请求体：格式同管理员创建挂载点
-  - 响应：新创建的挂载点信息
-
-- `PUT /api/user/mounts/:id`
-
-  - 描述：API 密钥用户更新挂载点信息
-  - 授权：需要有挂载权限的 API 密钥
-  - 参数：id - 挂载点 ID
-  - 请求体：包含需要更新的字段
-  - 响应：更新结果
-
-- `DELETE /api/user/mounts/:id`
-  - 描述：API 密钥用户删除挂载点
-  - 授权：需要有挂载权限的 API 密钥
-  - 参数：id - 挂载点 ID
-  - 响应：删除结果
+**注意**：API 密钥用户无法创建、更新或删除挂载点。挂载点的管理完全由管理员在后台进行，API 密钥用户只能查看管理员分配给其 basic_path 权限范围内的挂载点。
 
 ### 文件系统 API
 
@@ -626,10 +740,24 @@
 
   - 描述：上传文件
   - 授权：需要管理员令牌
-  - 查询参数：
-    - `path` - 上传目标路径（包含文件名）
-  - 请求体：文件内容（二进制）
+  - 请求体：FormData 格式
+    - `file` - 文件内容（必填）
+    - `path` - 上传目标路径，包含文件名（必填）
+    - `use_multipart` - 是否使用分片上传，true/false（可选）
   - 响应：上传结果
+    ```json
+    {
+      "code": 200,
+      "message": "文件上传成功",
+      "data": {
+        "path": "/uploads/example.jpg",
+        "size": 1024000,
+        "etag": "abc123def456",
+        "contentType": "image/jpeg"
+      },
+      "success": true
+    }
+    ```
 
 - `DELETE /api/admin/fs/remove`
 
@@ -818,10 +946,12 @@
 
   - 描述：上传文件
   - 授权：需要有文件权限的 API 密钥
-  - 查询参数：
-    - `path` - 上传目标路径（包含文件名）
-  - 请求体：文件内容（二进制）
-  - 响应：上传结果
+  - 请求体：FormData 格式
+    - `file` - 文件内容（必填）
+    - `path` - 上传目标路径，包含文件名（必填）
+    - `use_multipart` - 是否使用分片上传，true/false（可选）
+  - 响应：上传结果，格式同管理员版本
+  - 注意：API 密钥用户只能在其 basic_path 权限范围内上传文件
 
 - `DELETE /api/user/fs/remove`
 
@@ -1211,3 +1341,76 @@
     }
     ```
   - 响应：取消结果和清理状态
+
+## API 使用说明
+
+### 认证方式
+
+1. **管理员认证**：使用 Bearer Token 认证
+
+   ```
+   Authorization: Bearer <admin_token>
+   ```
+
+2. **API 密钥认证**：使用 Bearer Token 认证
+
+   ```
+   Authorization: Bearer <api_key>
+   ```
+
+3. **WebDAV 认证**：支持 Basic Auth 和 Bearer Token
+   ```
+   Authorization: Basic <base64(api_key:api_key)>
+   Authorization: Bearer <api_key>
+   ```
+
+### API 密钥权限说明
+
+- **text_permission**：允许创建、查看、修改和删除文本分享
+- **file_permission**：允许上传、下载、管理文件和使用文件系统 API
+- **mount_permission**：允许访问挂载点和使用 WebDAV 功能
+- **basic_path**：限制 API 密钥用户只能访问指定路径及其子路径
+
+### 错误处理
+
+所有 API 在出错时返回统一的错误格式：
+
+```json
+{
+  "code": 400,
+  "message": "错误描述",
+  "success": false
+}
+```
+
+常见 HTTP 状态码：
+
+- `200` - 成功
+- `201` - 创建成功
+- `400` - 请求参数错误
+- `401` - 未授权
+- `403` - 权限不足
+- `404` - 资源不存在
+- `409` - 资源冲突
+- `410` - 资源已过期
+- `500` - 服务器内部错误
+
+### 分页参数
+
+支持分页的 API 通常使用以下参数：
+
+- `limit` - 每页数量，默认 30
+- `offset` - 偏移量，默认 0
+- `page` - 页码（部分 API 使用）
+
+### 文件上传限制
+
+- 最大文件大小由系统设置决定，可通过 `/api/system/max-upload-size` 查询
+- 大文件建议使用分片上传或预签名 URL 上传
+- API 密钥用户受 basic_path 路径限制
+
+### 缓存机制
+
+- 系统使用目录缓存提高性能
+- 管理员和 API 密钥用户都可以手动清理缓存
+- 文件操作会自动清理相关缓存

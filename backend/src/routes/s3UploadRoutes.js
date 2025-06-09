@@ -1,7 +1,7 @@
 import { DbTables } from "../constants/index.js";
 import { ApiStatus } from "../constants/index.js";
-import { createErrorResponse, generateFileId, generateShortId, getSafeFileName, getFileNameAndExt, formatFileSize, getLocalTimeString } from "../utils/common.js";
-import { getMimeType, getMimeTypeFromFilename, getFileExtension } from "../utils/fileUtils.js";
+import { createErrorResponse, generateFileId, generateShortId, getSafeFileName, getFileNameAndExt, formatFileSize } from "../utils/common.js";
+import { getMimeTypeFromFilename } from "../utils/fileUtils.js";
 import { generatePresignedPutUrl, buildS3Url, deleteFileFromS3, generatePresignedUrl, createS3Client } from "../utils/s3Utils.js";
 import { validateAdminToken } from "../services/adminService.js";
 import { checkAndDeleteExpiredApiKey } from "../services/apiKeyService.js";
@@ -9,7 +9,7 @@ import { hashPassword } from "../utils/crypto.js";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { S3ProviderTypes } from "../constants/index.js";
 import { ConfiguredRetryStrategy } from "@smithy/util-retry";
-import { directoryCacheManager, clearCacheForFilePath } from "../utils/DirectoryCache.js";
+import { directoryCacheManager, clearCache } from "../utils/DirectoryCache.js";
 
 // 默认最大上传限制（MB）
 const DEFAULT_MAX_UPLOAD_SIZE_MB = 100;
@@ -117,11 +117,11 @@ export function registerS3UploadRoutes(app) {
               .prepare(
                   `
               UPDATE ${DbTables.API_KEYS}
-              SET last_used = ?
+              SET last_used = CURRENT_TIMESTAMP
               WHERE id = ?
             `
               )
-              .bind(getLocalTimeString(), keyRecord.id)
+              .bind(keyRecord.id)
               .run();
         }
       }
@@ -262,8 +262,8 @@ export function registerS3UploadRoutes(app) {
             // 删除关联的密码记录（如果有）
             await db.prepare(`DELETE FROM ${DbTables.FILE_PASSWORDS} WHERE file_id = ?`).bind(existingFile.id).run();
 
-            // 清除与文件相关的缓存
-            await clearCacheForFilePath(db, existingFile.storage_path, existingFile.s3_config_id);
+            // 清除与文件相关的缓存 - 使用统一的clearCache函数
+            await clearCache({ db, s3ConfigId: existingFile.s3_config_id });
           } catch (deleteError) {
             console.error(`删除旧文件记录时出错: ${deleteError.message}`);
             // 继续流程，不中断上传
@@ -272,7 +272,15 @@ export function registerS3UploadRoutes(app) {
       }
 
       // 处理文件路径
-      const customPath = body.path || "";
+      let customPath = body.path || "";
+
+      // 如果提供了自定义路径，确保它作为目录路径处理（以斜杠结尾）
+      if (customPath && customPath.trim() !== "") {
+        customPath = customPath.trim();
+        if (!customPath.endsWith("/")) {
+          customPath += "/";
+        }
+      }
 
       // 处理文件名
       const { name: fileName, ext: fileExt } = getFileNameAndExt(body.filename);
@@ -287,8 +295,9 @@ export function registerS3UploadRoutes(app) {
       // 组合最终路径 - 使用短ID-原始文件名的格式
       const storagePath = folderPath + customPath + shortId + "-" + safeFileName + fileExt;
 
-      // 获取内容类型
-      const mimetype = body.mimetype || getMimeTypeFromFilename(body.filename);
+      // 统一从文件名推断MIME类型，不依赖前端传来的mimetype
+      const mimetype = getMimeTypeFromFilename(body.filename);
+      console.log(`S3预签名上传：从文件名[${body.filename}]推断MIME类型: ${mimetype}`);
 
       // 获取加密密钥
       const encryptionSecret = c.env.ENCRYPTION_SECRET || "default-encryption-key";
@@ -303,13 +312,13 @@ export function registerS3UploadRoutes(app) {
           .prepare(
               `
           INSERT INTO ${DbTables.FILES} (
-            id, slug, filename, storage_path, s3_url, 
+            id, slug, filename, storage_path, s3_url,
             s3_config_id, mimetype, size, etag,
             created_by, created_at, updated_at
           ) VALUES (
-            ?, ?, ?, ?, ?, 
+            ?, ?, ?, ?, ?,
             ?, ?, ?, ?,
-            ?, ?, ?
+            ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
           )
         `
           )
@@ -323,9 +332,7 @@ export function registerS3UploadRoutes(app) {
               mimetype,
               0, // 初始大小为0，在上传完成后更新
               null, // 初始ETag为null，在上传完成后更新
-              authorizedBy === "admin" ? adminId : authorizedBy === "apikey" ? `apikey:${apiKeyId}` : null, // 使用与传统上传一致的格式标记API密钥用户
-              getLocalTimeString(), // 使用本地时间
-              getLocalTimeString() // 使用本地时间
+              authorizedBy === "admin" ? adminId : authorizedBy === "apikey" ? `apikey:${apiKeyId}` : null // 使用与传统上传一致的格式标记API密钥用户
           )
           .run();
 
@@ -340,6 +347,7 @@ export function registerS3UploadRoutes(app) {
           s3_url,
           slug,
           provider_type: s3Config.provider_type, // 添加提供商类型，便于前端适配不同S3服务
+          contentType: mimetype, // 添加后端推断的MIME类型，供前端使用
         },
         success: true,
       });
@@ -400,11 +408,11 @@ export function registerS3UploadRoutes(app) {
               .prepare(
                   `
               UPDATE ${DbTables.API_KEYS}
-              SET last_used = ?
+              SET last_used = CURRENT_TIMESTAMP
               WHERE id = ?
             `
               )
-              .bind(getLocalTimeString(), keyRecord.id)
+              .bind(keyRecord.id)
               .run();
         }
       }
@@ -549,21 +557,21 @@ export function registerS3UploadRoutes(app) {
 
       // 更新ETag和创建者
       const creator = authorizedBy === "admin" ? adminId : `apikey:${apiKeyId}`;
-      const now = getLocalTimeString();
+      // 移除 getLocalTimeString 使用，改用 CURRENT_TIMESTAMP
 
       // 更新文件记录
       await db
           .prepare(
               `
         UPDATE ${DbTables.FILES}
-        SET 
-          etag = ?, 
-          created_by = ?, 
+        SET
+          etag = ?,
+          created_by = ?,
           remark = ?,
           password = ?,
           expires_at = ?,
           max_views = ?,
-          updated_at = ?,
+          updated_at = CURRENT_TIMESTAMP,
           size = CASE WHEN ? IS NOT NULL THEN ? ELSE size END
         WHERE id = ?
       `
@@ -575,7 +583,6 @@ export function registerS3UploadRoutes(app) {
               passwordHash,
               expiresAt,
               maxViews,
-              now,
               fileSize !== null ? 1 : null, // 条件参数
               fileSize, // 文件大小值
               body.file_id
@@ -589,18 +596,23 @@ export function registerS3UploadRoutes(app) {
 
         if (passwordExists) {
           // 更新现有密码
-          await db.prepare(`UPDATE ${DbTables.FILE_PASSWORDS} SET plain_password = ?, updated_at = ? WHERE file_id = ?`).bind(body.password, now, body.file_id).run();
+          await db.prepare(`UPDATE ${DbTables.FILE_PASSWORDS} SET plain_password = ?, updated_at = CURRENT_TIMESTAMP WHERE file_id = ?`).bind(body.password, body.file_id).run();
         } else {
           // 插入新密码
           await db
-              .prepare(`INSERT INTO ${DbTables.FILE_PASSWORDS} (file_id, plain_password, created_at, updated_at) VALUES (?, ?, ?, ?)`)
-              .bind(body.file_id, body.password, now, now)
+              .prepare(`INSERT INTO ${DbTables.FILE_PASSWORDS} (file_id, plain_password, created_at, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`)
+              .bind(body.file_id, body.password)
               .run();
         }
       }
 
-      // 清除与文件相关的缓存
-      await clearCacheForFilePath(db, file.storage_path, file.s3_config_id);
+      // 更新父目录的修改时间
+      const encryptionSecret = c.env.ENCRYPTION_SECRET || "default-encryption-key";
+      const { updateParentDirectoriesModifiedTimeHelper } = await import("../services/fsService.js");
+      await updateParentDirectoriesModifiedTimeHelper(s3Config, file.storage_path, encryptionSecret);
+
+      // 清除与文件相关的缓存 - 使用统一的clearCache函数
+      await clearCache({ db, s3ConfigId: file.s3_config_id });
 
       // 获取更新后的文件记录
       const updatedFile = await db
@@ -677,10 +689,10 @@ export function registerS3UploadRoutes(app) {
           await db
               .prepare(
                   `UPDATE ${DbTables.API_KEYS}
-               SET last_used = ?
+               SET last_used = CURRENT_TIMESTAMP
                WHERE id = ?`
               )
-              .bind(getLocalTimeString(), keyRecord.id)
+              .bind(keyRecord.id)
               .run();
         }
       }
@@ -729,10 +741,10 @@ export function registerS3UploadRoutes(app) {
             await db
                 .prepare(
                     `UPDATE ${DbTables.API_KEYS}
-                 SET last_used = ?
+                 SET last_used = CURRENT_TIMESTAMP
                  WHERE id = ?`
                 )
-                .bind(getLocalTimeString(), keyRecord.id)
+                .bind(keyRecord.id)
                 .run();
           }
         }
@@ -873,7 +885,16 @@ export function registerS3UploadRoutes(app) {
 
       // 从查询参数获取其他选项
       const customSlug = c.req.query("slug");
-      const customPath = c.req.query("path") || "";
+      let customPath = c.req.query("path") || "";
+
+      // 如果提供了自定义路径，确保它作为目录路径处理（以斜杠结尾）
+      if (customPath && customPath.trim() !== "") {
+        customPath = customPath.trim();
+        if (!customPath.endsWith("/")) {
+          customPath += "/";
+        }
+      }
+
       const remark = c.req.query("remark") || "";
       const password = c.req.query("password");
       const expiresInHours = c.req.query("expires_in") ? parseInt(c.req.query("expires_in")) : 0;
@@ -933,8 +954,8 @@ export function registerS3UploadRoutes(app) {
             // 删除关联的密码记录（如果有）
             await db.prepare(`DELETE FROM ${DbTables.FILE_PASSWORDS} WHERE file_id = ?`).bind(existingFile.id).run();
 
-            // 清除与文件相关的缓存
-            await clearCacheForFilePath(db, existingFile.storage_path, existingFile.s3_config_id);
+            // 清除与文件相关的缓存 - 使用统一的clearCache函数
+            await clearCache({ db, s3ConfigId: existingFile.s3_config_id });
           } catch (deleteError) {
             console.error(`删除旧文件记录时出错: ${deleteError.message}`);
             // 继续流程，不中断上传
@@ -950,10 +971,9 @@ export function registerS3UploadRoutes(app) {
         contentType = contentType.split(";")[0].trim();
       }
 
-      // 如果没有Content-Type或者是通用类型，则根据文件扩展名推断
-      if (!contentType || contentType === "application/octet-stream") {
-        contentType = getMimeTypeFromFilename(filename);
-      }
+      // 统一从文件名推断MIME类型，不依赖客户端提供的Content-Type
+      contentType = getMimeTypeFromFilename(filename);
+      console.log(`S3直接上传：从文件名[${filename}]推断MIME类型: ${contentType}`);
 
       console.log(`文件上传 - 文件名: ${filename}, Content-Type: ${contentType}, 使用原始文件名: ${useOriginalFilename}`);
 
@@ -1086,19 +1106,18 @@ export function registerS3UploadRoutes(app) {
       }
 
       // 保存文件记录到数据库
-      const now = getLocalTimeString();
       await db
           .prepare(
               `INSERT INTO ${DbTables.FILES} (
-            id, slug, filename, storage_path, s3_url, 
+            id, slug, filename, storage_path, s3_url,
             s3_config_id, mimetype, size, etag,
-            created_by, created_at, updated_at, 
+            created_by, created_at, updated_at,
             remark, expires_at, max_views, use_proxy,
             password
           ) VALUES (
-            ?, ?, ?, ?, ?, 
+            ?, ?, ?, ?, ?,
             ?, ?, ?, ?,
-            ?, ?, ?,
+            ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP,
             ?, ?, ?, ?,
             ?
           )`
@@ -1114,8 +1133,6 @@ export function registerS3UploadRoutes(app) {
               fileSize,
               etag,
               authorizedBy === "admin" ? adminId : authorizedBy === "apikey" ? `apikey:${apiKeyId}` : null,
-              now,
-              now,
               remark,
               expiresAt,
               maxViews > 0 ? maxViews : null,
@@ -1126,11 +1143,18 @@ export function registerS3UploadRoutes(app) {
 
       // 如果设置了密码，保存明文密码记录
       if (password) {
-        await db.prepare(`INSERT INTO ${DbTables.FILE_PASSWORDS} (file_id, plain_password, created_at, updated_at) VALUES (?, ?, ?, ?)`).bind(fileId, password, now, now).run();
+        await db
+            .prepare(`INSERT INTO ${DbTables.FILE_PASSWORDS} (file_id, plain_password, created_at, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`)
+            .bind(fileId, password)
+            .run();
       }
 
-      // 清除与文件相关的缓存
-      await clearCacheForFilePath(db, storagePath, s3ConfigId);
+      // 更新父目录的修改时间
+      const { updateParentDirectoriesModifiedTimeHelper } = await import("../services/fsService.js");
+      await updateParentDirectoriesModifiedTimeHelper(s3Config, storagePath, encryptionSecret);
+
+      // 清除与文件相关的缓存 - 使用统一的clearCache函数
+      await clearCache({ db, s3ConfigId });
 
       // 生成预签名URL (有效期1小时)，传递MIME类型以确保正确的Content-Type
       const previewDirectUrl = await generatePresignedUrl(s3Config, storagePath, encryptionSecret, 3600, false, contentType);
@@ -1156,7 +1180,7 @@ export function registerS3UploadRoutes(app) {
           mimetype: contentType,
           size: fileSize,
           remark,
-          created_at: now,
+          created_at: new Date().toISOString(),
           requires_password: !!passwordHash,
           views: 0,
           max_views: maxViews > 0 ? maxViews : null,

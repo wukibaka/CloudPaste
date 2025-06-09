@@ -1,7 +1,9 @@
-import { getMountsByAdmin, getMountsByApiKey, getMountByIdForAdmin, getMountByIdForApiKey } from "../../services/storageMountService.js";
+import { getMountsByAdmin, getMountsByApiKey } from "../../services/storageMountService.js";
 import { createS3Client } from "../../utils/s3Utils.js";
-import { S3Client, ListObjectsV2Command, HeadObjectCommand } from "@aws-sdk/client-s3";
-import { getMimeType } from "../../utils/fileUtils.js";
+import { ListObjectsV2Command } from "@aws-sdk/client-s3";
+import { getMimeTypeFromFilename } from "../../utils/fileUtils.js";
+import { handleWebDAVError } from "../utils/errorUtils.js";
+import { checkPathPermission, checkPathPermissionForNavigation } from "../../services/apiKeyService.js";
 
 // 添加配置常量，用于控制分页行为
 const ABSOLUTE_MAX_ITEMS = 10000; // 绝对最大项目数，防止过度消耗资源
@@ -137,7 +139,16 @@ export async function handlePropfind(c, path, userId, userType, db) {
     if (userType === "admin") {
       mounts = await getMountsByAdmin(db, userId);
     } else if (userType === "apiKey") {
-      mounts = await getMountsByApiKey(db, userId);
+      // 对于API密钥用户，userId现在是完整的API密钥信息对象
+      if (typeof userId === "object" && userId.basicPath) {
+        // 使用基于基本路径的挂载点获取逻辑
+        const { getAccessibleMountsByBasicPath } = await import("../../services/apiKeyService.js");
+        mounts = await getAccessibleMountsByBasicPath(db, userId.basicPath);
+      } else {
+        // 兼容旧的逻辑，如果userId是字符串
+        const apiKeyId = typeof userId === "string" ? userId : userId.id;
+        mounts = await getMountsByApiKey(db, apiKeyId);
+      }
     } else {
       return new Response("Unauthorized", { status: 401 });
     }
@@ -168,7 +179,7 @@ export async function handlePropfind(c, path, userId, userType, db) {
 
     // 处理虚拟目录路径 (根目录或中间目录)
     if (isVirtualPath) {
-      return await respondWithMounts(c, userId, userType, db, path);
+      return await respondWithMounts(userId, userType, db, path);
     }
 
     // 处理实际挂载点路径
@@ -185,12 +196,11 @@ export async function handlePropfind(c, path, userId, userType, db) {
     // 规范化S3子路径
     let s3SubPath = subPath.startsWith("/") ? subPath.substring(1) : subPath;
 
-    // 如果有默认文件夹，添加到路径
-    if (s3Config.default_folder) {
-      let defaultFolder = s3Config.default_folder;
-      if (!defaultFolder.endsWith("/")) defaultFolder += "/";
-      s3SubPath = defaultFolder + s3SubPath;
-    }
+    // 处理root_prefix
+    const rootPrefix = s3Config.root_prefix ? (s3Config.root_prefix.endsWith("/") ? s3Config.root_prefix : s3Config.root_prefix + "/") : "";
+
+    // 构建完整的S3路径
+    s3SubPath = rootPrefix + s3SubPath;
 
     // 规范化S3子路径，移除多余的斜杠
     s3SubPath = s3SubPath.replace(/\/+/g, "/");
@@ -203,11 +213,11 @@ export async function handlePropfind(c, path, userId, userType, db) {
       console.warn("更新存储挂载点最后使用时间失败:", updateError);
     }
 
-    // 构建响应，传递最大项目数限制
-    return await buildPropfindResponse(c, s3Client, s3Config.bucket_name, s3SubPath, depth, path, maxItems);
+    // 构建响应，传递最大项目数限制和用户信息
+    return await buildPropfindResponse(s3Client, s3Config.bucket_name, s3SubPath, depth, path, maxItems, userId, userType);
   } catch (error) {
-    console.error("PROPFIND处理错误:", error);
-    return new Response("Internal Server Error: " + error.message, { status: 500 });
+    // 使用统一的错误处理
+    return handleWebDAVError("PROPFIND", error);
   }
 }
 
@@ -219,12 +229,22 @@ export async function handlePropfind(c, path, userId, userType, db) {
  * @param {D1Database} db - D1数据库实例
  * @param {string} path - 当前路径
  */
-async function respondWithMounts(c, userId, userType, db, path = "/") {
+async function respondWithMounts(userIdOrInfo, userType, db, path = "/") {
   let mounts;
   if (userType === "admin") {
-    mounts = await getMountsByAdmin(db, userId);
+    // 对于WebDAV访问，管理员也只能看到激活的挂载点
+    mounts = await getMountsByAdmin(db, userIdOrInfo, false);
   } else if (userType === "apiKey") {
-    mounts = await getMountsByApiKey(db, userId);
+    // 对于API密钥用户，userIdOrInfo现在是完整的API密钥信息对象
+    if (typeof userIdOrInfo === "object" && userIdOrInfo.basicPath) {
+      // 使用基于基本路径的挂载点获取逻辑
+      const { getAccessibleMountsByBasicPath } = await import("../../services/apiKeyService.js");
+      mounts = await getAccessibleMountsByBasicPath(db, userIdOrInfo.basicPath);
+    } else {
+      // 兼容旧的逻辑，如果userIdOrInfo是字符串
+      const apiKeyId = typeof userIdOrInfo === "string" ? userIdOrInfo : userIdOrInfo.id;
+      mounts = await getMountsByApiKey(db, apiKeyId);
+    }
   } else {
     return new Response("Unauthorized", { status: 401 });
   }
@@ -232,6 +252,13 @@ async function respondWithMounts(c, userId, userType, db, path = "/") {
   // 规范化路径
   path = path.startsWith("/") ? path : "/" + path;
   path = path.endsWith("/") ? path : path + "/";
+
+  // 对于API密钥用户，检查是否有导航权限访问此路径
+  if (userType === "apiKey" && typeof userIdOrInfo === "object" && userIdOrInfo.basicPath) {
+    if (!checkPathPermissionForNavigation(userIdOrInfo.basicPath, path)) {
+      return new Response("没有权限访问此路径", { status: 403 });
+    }
+  }
 
   // 获取当前路径下的目录结构
   const structure = getDirectoryStructure(mounts, path);
@@ -375,8 +402,10 @@ async function respondWithMounts(c, userId, userType, db, path = "/") {
  * @param {string} depth - 深度
  * @param {string} requestPath - 请求路径
  * @param {number} maxItems - 最大项目数
+ * @param {Object} userInfo - 用户信息（用于权限检查）
+ * @param {string} userType - 用户类型 (admin 或 apiKey)
  */
-async function buildPropfindResponse(c, s3Client, bucketName, prefix, depth, requestPath, maxItems = ABSOLUTE_MAX_ITEMS) {
+async function buildPropfindResponse(s3Client, bucketName, prefix, depth, requestPath, maxItems = ABSOLUTE_MAX_ITEMS, userInfo = null, userType = "admin") {
   // 确保路径以斜杠结尾
   if (!prefix.endsWith("/") && prefix !== "") {
     prefix += "/";
@@ -457,10 +486,19 @@ async function buildPropfindResponse(c, s3Client, bucketName, prefix, depth, req
           const folderName = item.Prefix.split("/").filter(Boolean).pop();
           if (!folderName) continue; // 跳过空文件夹名
 
+          // 构建文件夹路径用于权限检查
+          const folderPath = `${requestPath}${folderName}/`;
+
+          // 对于API密钥用户，检查是否有权限访问此目录
+          if (userType === "apiKey" && userInfo && userInfo.basicPath) {
+            if (!checkPathPermission(userInfo.basicPath, folderPath)) {
+              continue; // 跳过没有权限的目录
+            }
+          }
+
           // 转义文件夹名中的XML特殊字符
           const escapedFolderName = escapeXmlChars(folderName);
-          // 构建并编码文件夹路径
-          const folderPath = `${requestPath}${folderName}/`;
+          // 编码文件夹路径
           const encodedFolderPath = encodeUriPath(folderPath);
 
           // 为子目录生成唯一的ETag
@@ -509,14 +547,24 @@ async function buildPropfindResponse(c, s3Client, bucketName, prefix, depth, req
           const fileName = item.Key.split("/").pop();
           if (!fileName) continue; // 跳过空文件名
 
+          // 构建文件路径用于权限检查
+          const filePath = `${requestPath}${fileName}`;
+
+          // 对于API密钥用户，检查是否有权限访问此文件
+          if (userType === "apiKey" && userInfo && userInfo.basicPath) {
+            if (!checkPathPermission(userInfo.basicPath, filePath)) {
+              continue; // 跳过没有权限的文件
+            }
+          }
+
           // 转义文件名中的XML特殊字符
           const escapedFileName = escapeXmlChars(fileName);
-          // 构建并编码文件路径
-          const filePath = `${requestPath}${fileName}`;
+          // 编码文件路径
           const encodedFilePath = encodeUriPath(filePath);
 
-          // 获取文件的MIME类型
-          const contentType = getMimeType(fileName);
+          // 统一从文件名推断MIME类型
+          const contentType = getMimeTypeFromFilename(fileName);
+          console.log(`WebDAV PROPFIND - 从文件名[${fileName}]推断MIME类型: ${contentType}`);
 
           // 获取文件的修改时间和创建时间
           const fileModified = new Date(item.LastModified).toUTCString();
@@ -582,8 +630,17 @@ async function buildPropfindResponse(c, s3Client, bucketName, prefix, depth, req
               const folderName = item.Prefix.split("/").filter(Boolean).pop();
               if (!folderName) continue;
 
-              const escapedFolderName = escapeXmlChars(folderName);
+              // 构建文件夹路径用于权限检查
               const folderPath = `${requestPath}${folderName}/`;
+
+              // 对于API密钥用户，检查是否有权限访问此目录
+              if (userType === "apiKey" && userInfo && userInfo.basicPath) {
+                if (!checkPathPermission(userInfo.basicPath, folderPath)) {
+                  continue; // 跳过没有权限的目录
+                }
+              }
+
+              const escapedFolderName = escapeXmlChars(folderName);
               const encodedFolderPath = encodeUriPath(folderPath);
 
               // 为子目录生成唯一的ETag
@@ -631,12 +688,21 @@ async function buildPropfindResponse(c, s3Client, bucketName, prefix, depth, req
               const fileName = item.Key.split("/").pop();
               if (!fileName) continue;
 
-              const escapedFileName = escapeXmlChars(fileName);
+              // 构建文件路径用于权限检查
               const filePath = `${requestPath}${fileName}`;
+
+              // 对于API密钥用户，检查是否有权限访问此文件
+              if (userType === "apiKey" && userInfo && userInfo.basicPath) {
+                if (!checkPathPermission(userInfo.basicPath, filePath)) {
+                  continue; // 跳过没有权限的文件
+                }
+              }
+
+              const escapedFileName = escapeXmlChars(fileName);
               const encodedFilePath = encodeUriPath(filePath);
 
-              // 获取文件的MIME类型
-              const contentType = getMimeType(fileName);
+              // 统一从文件名推断MIME类型
+              const contentType = getMimeTypeFromFilename(fileName);
 
               // 获取文件的修改时间和创建时间
               const fileModified = new Date(item.LastModified).toUTCString();

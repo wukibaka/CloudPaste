@@ -6,9 +6,10 @@ import { findMountPointByPath, normalizeS3SubPath, updateMountLastUsed, checkDir
 import { createS3Client } from "../../utils/s3Utils.js";
 import { PutObjectCommand, CreateMultipartUploadCommand, UploadPartCommand, CompleteMultipartUploadCommand, AbortMultipartUploadCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { getMimeType } from "../../utils/fileUtils.js";
+import { getMimeTypeFromFilename } from "../../utils/fileUtils.js";
 import { initializeMultipartUpload, uploadPart, completeMultipartUpload, abortMultipartUpload } from "../../services/multipartUploadService.js";
 import { clearCacheAfterWebDAVOperation } from "../utils/cacheUtils.js";
+import { handleWebDAVError } from "../utils/errorUtils.js";
 
 // 分片上传阈值，设为5MB以符合S3对分片的最小大小要求
 const MULTIPART_THRESHOLD = 5 * 1024 * 1024; // 5MB
@@ -301,8 +302,8 @@ export async function handlePut(c, path, userId, userType, db) {
     // 为了处理空文件的情况，我们需要检查是否有请求体
     const emptyBodyCheck = declaredContentLength === 0;
 
-    // 使用统一函数查找挂载点
-    const mountResult = await findMountPointByPath(db, path, userId, userType);
+    // 使用统一函数查找挂载点 - PUT使用操作权限
+    const mountResult = await findMountPointByPath(db, path, userId, userType, "operation");
 
     // 处理错误情况
     if (mountResult.error) {
@@ -344,10 +345,9 @@ export async function handlePut(c, path, userId, userType, db) {
       contentType = contentType.split(";")[0].trim();
     }
 
-    // 如果Content-Type未设置或为通用类型，从文件名推断
-    if (!contentType || contentType === "application/octet-stream") {
-      contentType = getMimeType(filename);
-    }
+    // 统一从文件名推断MIME类型，不依赖客户端提供的Content-Type
+    contentType = getMimeTypeFromFilename(filename);
+    console.log(`WebDAV PUT - 从文件名[${filename}]推断MIME类型: ${contentType}`);
 
     console.log(`WebDAV PUT - 文件名: ${filename}, Content-Type: ${contentType}`);
 
@@ -440,7 +440,7 @@ export async function handlePut(c, path, userId, userType, db) {
         // 如果代理上传成功，更新挂载点的最后使用时间并清理缓存
         if (proxyResponse.status === 201) {
           await updateMountLastUsed(db, mount.id);
-          await finalizePutOperation(db, s3Client, s3Config, s3SubPath);
+          await finalizePutOperation(db, s3Client, s3Config, s3SubPath, mount.id);
         }
 
         return proxyResponse;
@@ -467,7 +467,7 @@ export async function handlePut(c, path, userId, userType, db) {
       await s3Client.send(putCommand);
 
       // 清理缓存
-      await finalizePutOperation(db, s3Client, s3Config, s3SubPath);
+      await finalizePutOperation(db, s3Client, s3Config, s3SubPath, mount.id);
 
       // 更新挂载点的最后使用时间
       await updateMountLastUsed(db, mount.id);
@@ -524,7 +524,7 @@ export async function handlePut(c, path, userId, userType, db) {
 
         // 处理成功上传后的操作
         await updateMountLastUsed(db, mount.id);
-        await finalizePutOperation(db, s3Client, s3Config, s3SubPath);
+        await finalizePutOperation(db, s3Client, s3Config, s3SubPath, mount.id);
 
         const uploadDuration = Math.ceil((Date.now() - requestStartTime) / 1000);
         const uploadSpeedMBps = (bytesRead / 1024 / 1024 / uploadDuration).toFixed(2);
@@ -611,7 +611,7 @@ export async function handlePut(c, path, userId, userType, db) {
         const completeResult = await completeMultipartUpload(db, path, uploadId, parts, userId, userType, c.env.ENCRYPTION_SECRET, s3Key, contentType, totalProcessed, false);
 
         // 清理缓存
-        await finalizePutOperation(db, s3Client, s3Config, s3SubPath);
+        await finalizePutOperation(db, s3Client, s3Config, s3SubPath, mount.id);
 
         const uploadDuration = Math.ceil((Date.now() - requestStartTime) / 1000);
         const uploadSpeedMBps = (totalProcessed / 1024 / 1024 / uploadDuration).toFixed(2);
@@ -644,16 +644,8 @@ export async function handlePut(c, path, userId, userType, db) {
       }
     }
   } catch (error) {
-    console.error("PUT请求处理错误:", error);
-    // 生成唯一错误ID用于日志追踪
-    const errorId = Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
-    console.error(`PUT错误详情[${errorId}]:`, error);
-
-    // 对外部仅返回通用错误信息和错误ID，不暴露具体错误
-    return new Response(`内部服务器错误 (错误ID: ${errorId})`, {
-      status: 500,
-      headers: { "Content-Type": "text/plain" },
-    });
+    // 使用统一的错误处理
+    return handleWebDAVError("PUT", error, false, false);
   }
 }
 
@@ -719,14 +711,19 @@ async function proxyUploadToS3(c, presignedUrl, contentType) {
   }
 }
 
-async function finalizePutOperation(db, s3Client, s3Config, s3SubPath) {
+async function finalizePutOperation(db, s3Client, s3Config, s3SubPath, mountId) {
   try {
+    // 更新父目录的修改时间
+    const rootPrefix = s3Config.root_prefix ? (s3Config.root_prefix.endsWith("/") ? s3Config.root_prefix : s3Config.root_prefix + "/") : "";
+    const { updateParentDirectoriesModifiedTime } = await import("../../services/fsService.js");
+    await updateParentDirectoriesModifiedTime(s3Client, s3Config.bucket_name, s3SubPath, rootPrefix);
+
     // 更新缓存 - 清除相关目录的缓存
-    await clearCacheAfterWebDAVOperation(db, s3SubPath, s3Config);
+    await clearCacheAfterWebDAVOperation(db, s3SubPath, s3Config, false, mountId);
     return true;
   } catch (error) {
-    console.error("PUT操作后清理缓存错误:", error);
-    // 即使缓存清理失败也返回true，不影响主流程
+    console.error("PUT操作后处理错误:", error);
+    // 即使处理失败也返回true，不影响主流程
     return true;
   }
 }

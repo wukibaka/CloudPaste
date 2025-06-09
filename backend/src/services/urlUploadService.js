@@ -4,11 +4,12 @@
  */
 
 import { DbTables } from "../constants/index.js";
-import { generateFileId, generateShortId, getLocalTimeString, getFileNameAndExt, getSafeFileName } from "../utils/common.js";
+import { generateFileId, generateShortId, getFileNameAndExt, getSafeFileName } from "../utils/common.js";
 import { buildS3Url, generatePresignedPutUrl } from "../utils/s3Utils.js";
 import { S3Client, PutObjectCommand, CreateMultipartUploadCommand, UploadPartCommand, CompleteMultipartUploadCommand, AbortMultipartUploadCommand } from "@aws-sdk/client-s3";
 import { createS3Client } from "../utils/s3Utils.js";
-import { clearCacheForFilePath } from "../utils/DirectoryCache.js";
+import { clearCache } from "../utils/DirectoryCache.js";
+import { getEnhancedUrlMetadata as getEnhancedMimeMetadata } from "../utils/enhancedMimeUtils.js";
 
 // 分片上传配置
 const DEFAULT_PART_SIZE = 5 * 1024 * 1024; // 5MB默认分片大小
@@ -51,12 +52,15 @@ function calculateOptimalPartSize(fileSize) {
 }
 
 /**
- * 验证URL并获取文件元信息
+ * 验证URL并获取文件元信息（增强版）
  * @param {string} url - 要验证的URL
+ * @param {Object} options - 选项
  * @returns {Promise<Object>} 包含文件元信息的对象
  * @throws {Error} 如果URL无效或无法访问
  */
-export async function validateAndGetUrlMetadata(url) {
+export async function validateAndGetUrlMetadata(url, options = {}) {
+  const { enableEnhancedMimeDetection = true } = options;
+
   try {
     // 验证URL格式
     const parsedUrl = new URL(url);
@@ -65,6 +69,39 @@ export async function validateAndGetUrlMetadata(url) {
     if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
       throw new Error("仅支持HTTP/HTTPS协议的URL");
     }
+
+    // 如果启用增强MIME检测，优先使用增强检测
+    if (enableEnhancedMimeDetection) {
+      try {
+        console.log(`🚀 使用增强MIME检测: ${url}`);
+        const enhancedMetadata = await getEnhancedMimeMetadata(url, options);
+
+        if (enhancedMetadata && !enhancedMetadata.error) {
+          // 转换为兼容格式
+          const metadata = {
+            url: enhancedMetadata.url,
+            filename: enhancedMetadata.filename,
+            contentType: enhancedMetadata.enhancedContentType || enhancedMetadata.contentType,
+            size: enhancedMetadata.size,
+            lastModified: enhancedMetadata.lastModified,
+            method: "ENHANCED",
+            corsSupported: enhancedMetadata.corsSupported,
+            // 增强信息
+            detectionMethod: enhancedMetadata.detectionMethod,
+            detectionConfidence: enhancedMetadata.detectionConfidence,
+            fileTypeLibraryUsed: enhancedMetadata.fileTypeLibraryUsed,
+          };
+
+          console.log(`✅ 增强检测成功: ${metadata.contentType} (置信度: ${metadata.detectionConfidence})`);
+          return metadata;
+        }
+      } catch (enhancedError) {
+        console.warn("增强MIME检测失败，回退到传统方法:", enhancedError.message);
+      }
+    }
+
+    // 回退到传统检测方法
+    console.log(`📡 使用传统HEAD/Range检测: ${url}`);
 
     // 首先尝试HEAD请求获取元信息
     let response;
@@ -361,14 +398,19 @@ export async function prepareUrlUpload(db, s3ConfigId, metadata, createdBy, encr
 
   if (options.path) {
     // 使用自定义路径，确保路径格式正确
-    const customPath = options.path.startsWith("/") ? options.path.substring(1) : options.path;
+    let customPath = options.path.startsWith("/") ? options.path.substring(1) : options.path;
     // 确保路径以'/'结尾
-    const formattedPath = customPath.endsWith("/") ? customPath : customPath + "/";
-    // 组合路径
-    storagePath = formattedPath + shortId + "-" + safeFileName + fileExt;
+    if (customPath && customPath.trim() !== "") {
+      customPath = customPath.trim();
+      if (!customPath.endsWith("/")) {
+        customPath += "/";
+      }
+    }
+    // 组合路径：默认文件夹 + 自定义路径 + 文件名
+    storagePath = folderPath + customPath + shortId + "-" + safeFileName + fileExt;
   } else {
-    // 使用默认路径
-    storagePath = folderPath + "url_upload/" + shortId + "-" + safeFileName + fileExt;
+    // 直接使用默认文件夹，不添加额外的url_upload子目录
+    storagePath = folderPath + shortId + "-" + safeFileName + fileExt;
   }
 
   // 处理自定义slug或生成一个随机slug
@@ -405,44 +447,42 @@ export async function prepareUrlUpload(db, s3ConfigId, metadata, createdBy, encr
 
   // 生成预签名上传URL，适当延长有效期以便处理大文件
   const uploadUrl = await generatePresignedPutUrl(
-    s3Config,
-    storagePath,
-    metadata.contentType,
-    encryptionSecret,
-    7200 // 2小时有效期，考虑到从远程URL下载可能需要较长时间
+      s3Config,
+      storagePath,
+      metadata.contentType,
+      encryptionSecret,
+      7200 // 2小时有效期，考虑到从远程URL下载可能需要较长时间
   );
 
   // 创建文件记录
   await db
-    .prepare(
-      `
+      .prepare(
+          `
       INSERT INTO ${DbTables.FILES} (
-        id, slug, filename, storage_path, s3_url, 
+        id, slug, filename, storage_path, s3_url,
         s3_config_id, mimetype, size, etag,
         created_by, created_at, updated_at, remark
       ) VALUES (
-        ?, ?, ?, ?, ?, 
+        ?, ?, ?, ?, ?,
         ?, ?, ?, ?,
-        ?, ?, ?, ?
+        ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?
       )
     `
-    )
-    .bind(
-      fileId,
-      slug,
-      metadata.filename,
-      storagePath,
-      s3Url,
-      s3ConfigId,
-      metadata.contentType || "application/octet-stream",
-      metadata.size || 0, // 初始大小可能为0或来自元数据
-      null, // 初始ETag为null，在上传完成后更新
-      createdBy,
-      getLocalTimeString(),
-      getLocalTimeString(),
-      remark
-    )
-    .run();
+      )
+      .bind(
+          fileId,
+          slug,
+          metadata.filename,
+          storagePath,
+          s3Url,
+          s3ConfigId,
+          metadata.contentType || "application/octet-stream",
+          metadata.size || 0, // 初始大小可能为0或来自元数据
+          null, // 初始ETag为null，在上传完成后更新
+          createdBy,
+          remark
+      )
+      .run();
 
   // 返回上传信息
   return {
@@ -513,14 +553,19 @@ export async function initializeMultipartUpload(db, url, s3ConfigId, metadata, c
 
   if (options.path) {
     // 使用自定义路径，确保路径格式正确
-    const customPath = options.path.startsWith("/") ? options.path.substring(1) : options.path;
+    let customPath = options.path.startsWith("/") ? options.path.substring(1) : options.path;
     // 确保路径以'/'结尾
-    const formattedPath = customPath.endsWith("/") ? customPath : customPath + "/";
-    // 组合路径
-    storagePath = formattedPath + shortId + "-" + safeFileName + fileExt;
+    if (customPath && customPath.trim() !== "") {
+      customPath = customPath.trim();
+      if (!customPath.endsWith("/")) {
+        customPath += "/";
+      }
+    }
+    // 组合路径：默认文件夹 + 自定义路径 + 文件名
+    storagePath = folderPath + customPath + shortId + "-" + safeFileName + fileExt;
   } else {
-    // 使用默认路径
-    storagePath = folderPath + "url_upload/" + shortId + "-" + safeFileName + fileExt;
+    // 直接使用默认文件夹，不添加额外的url_upload子目录
+    storagePath = folderPath + shortId + "-" + safeFileName + fileExt;
   }
 
   // 处理自定义slug或生成随机slug
@@ -625,52 +670,47 @@ export async function initializeMultipartUpload(db, url, s3ConfigId, metadata, c
       });
     }
 
-    // 记录当前日期时间
-    const now = getLocalTimeString();
-
     // 创建文件记录
     await db
-      .prepare(
-        `
+        .prepare(
+            `
         INSERT INTO ${DbTables.FILES} (
-          id, slug, filename, storage_path, s3_url, 
+          id, slug, filename, storage_path, s3_url,
           s3_config_id, mimetype, size, etag,
           created_by, created_at, updated_at, remark,
           password, expires_at, max_views
         ) VALUES (
-          ?, ?, ?, ?, ?, 
+          ?, ?, ?, ?, ?,
           ?, ?, ?, ?,
-          ?, ?, ?, ?,
+          ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?,
           ?, ?, ?
         )
       `
-      )
-      .bind(
-        fileId,
-        slug,
-        metadata.filename,
-        storagePath,
-        s3Url,
-        s3ConfigId,
-        metadata.contentType || "application/octet-stream",
-        totalSize, // 初始大小
-        null, // 初始ETag为null，在上传完成后更新
-        createdBy,
-        now,
-        now,
-        remark,
-        passwordHash,
-        expiresAt,
-        maxViews
-      )
-      .run();
+        )
+        .bind(
+            fileId,
+            slug,
+            metadata.filename,
+            storagePath,
+            s3Url,
+            s3ConfigId,
+            metadata.contentType || "application/octet-stream",
+            totalSize, // 初始大小
+            null, // 初始ETag为null，在上传完成后更新
+            createdBy,
+            remark,
+            passwordHash,
+            expiresAt,
+            maxViews
+        )
+        .run();
 
     // 如果设置了密码，保存明文密码记录（用于分享）
     if (options.password) {
       await db
-        .prepare(`INSERT INTO ${DbTables.FILE_PASSWORDS} (file_id, plain_password, created_at, updated_at) VALUES (?, ?, ?, ?)`)
-        .bind(fileId, options.password, now, now)
-        .run();
+          .prepare(`INSERT INTO ${DbTables.FILE_PASSWORDS} (file_id, plain_password, created_at, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`)
+          .bind(fileId, options.password)
+          .run();
     }
 
     // 返回分片上传信息
@@ -711,17 +751,17 @@ export async function initializeMultipartUpload(db, url, s3ConfigId, metadata, c
 export async function completeMultipartUpload(db, fileId, uploadId, parts, encryptionSecret) {
   // 查询文件信息
   const file = await db
-    .prepare(
-      `
+      .prepare(
+          `
       SELECT 
         id, slug, filename, storage_path, s3_url, 
         s3_config_id, mimetype, remark
       FROM ${DbTables.FILES}
       WHERE id = ?
         `
-    )
-    .bind(fileId)
-    .first();
+      )
+      .bind(fileId)
+      .first();
 
   if (!file) {
     throw new Error("文件不存在或已被删除");
@@ -776,36 +816,39 @@ export async function completeMultipartUpload(db, fileId, uploadId, parts, encry
 
     // 更新文件记录
     await db
-      .prepare(
-        `
+        .prepare(
+            `
         UPDATE ${DbTables.FILES}
-        SET 
+        SET
           etag = ?,
           size = CASE WHEN ? > 0 THEN ? ELSE size END,
-          updated_at = ?
+          updated_at = CURRENT_TIMESTAMP
         WHERE id = ?
       `
-      )
-      .bind(
-        etag,
-        totalSize > 0 ? 1 : 0, // 条件
-        totalSize,
-        getLocalTimeString(),
-        fileId
-      )
-      .run();
+        )
+        .bind(
+            etag,
+            totalSize > 0 ? 1 : 0, // 条件
+            totalSize,
+            fileId
+        )
+        .run();
 
-    // 清除与文件相关的缓存
+    // 更新父目录的修改时间
+    const { updateParentDirectoriesModifiedTimeHelper } = await import("./fsService.js");
+    await updateParentDirectoriesModifiedTimeHelper(s3Config, file.storage_path, encryptionSecret);
+
+    // 清除与文件相关的缓存 - 使用统一的clearCache函数
     try {
-      await clearCacheForFilePath(db, file.storage_path, file.s3_config_id);
+      await clearCache({ db, s3ConfigId: file.s3_config_id });
     } catch (cacheError) {
       console.warn(`清除文件缓存失败: ${cacheError.message}`);
     }
 
     // 获取更新后的文件信息
     const updatedFile = await db
-      .prepare(
-        `
+        .prepare(
+            `
         SELECT 
           id, slug, filename, storage_path, s3_url, 
           mimetype, size, etag, 
@@ -813,9 +856,9 @@ export async function completeMultipartUpload(db, fileId, uploadId, parts, encry
         FROM ${DbTables.FILES}
         WHERE id = ?
       `
-      )
-      .bind(fileId)
-      .first();
+        )
+        .bind(fileId)
+        .first();
 
     // 返回完成的文件信息
     return {
@@ -850,17 +893,17 @@ export async function completeMultipartUpload(db, fileId, uploadId, parts, encry
 export async function abortMultipartUpload(db, fileId, uploadId, encryptionSecret) {
   // 查询文件信息
   const file = await db
-    .prepare(
-      `
+      .prepare(
+          `
       SELECT 
         id, slug, filename, storage_path, s3_url, 
         s3_config_id, mimetype, remark
       FROM ${DbTables.FILES}
       WHERE id = ?
     `
-    )
-    .bind(fileId)
-    .first();
+      )
+      .bind(fileId)
+      .first();
 
   if (!file) {
     throw new Error("文件不存在或已被删除");
@@ -898,9 +941,9 @@ export async function abortMultipartUpload(db, fileId, uploadId, encryptionSecre
     // 同时删除可能存在的密码记录
     await db.prepare(`DELETE FROM ${DbTables.FILE_PASSWORDS} WHERE file_id = ?`).bind(fileId).run();
 
-    // 清除与文件相关的缓存
+    // 清除与文件相关的缓存 - 使用统一的clearCache函数
     try {
-      await clearCacheForFilePath(db, file.storage_path, file.s3_config_id);
+      await clearCache({ db, s3ConfigId: file.s3_config_id });
     } catch (cacheError) {
       console.warn(`清除文件缓存失败: ${cacheError.message}`);
     }
@@ -921,9 +964,9 @@ export async function abortMultipartUpload(db, fileId, uploadId, encryptionSecre
 
       await db.prepare(`DELETE FROM ${DbTables.FILE_PASSWORDS} WHERE file_id = ?`).bind(fileId).run();
 
-      // 尝试清除缓存
+      // 尝试清除缓存 - 使用统一的clearCache函数
       try {
-        await clearCacheForFilePath(db, file.storage_path, file.s3_config_id);
+        await clearCache({ db, s3ConfigId: file.s3_config_id });
       } catch (cacheError) {
         console.warn(`清除文件缓存失败: ${cacheError.message}`);
       }

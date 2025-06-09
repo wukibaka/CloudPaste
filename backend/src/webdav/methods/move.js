@@ -6,6 +6,7 @@ import { findMountPointByPath, normalizeS3SubPath, parseDestinationPath, updateM
 import { createS3Client } from "../../utils/s3Utils.js";
 import { CopyObjectCommand, DeleteObjectCommand, ListObjectsV2Command, HeadObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { clearCacheAfterWebDAVOperation } from "../utils/cacheUtils.js";
+import { handleWebDAVError } from "../utils/errorUtils.js";
 
 /**
  * 处理MOVE请求
@@ -17,8 +18,8 @@ import { clearCacheAfterWebDAVOperation } from "../utils/cacheUtils.js";
  */
 export async function handleMove(c, path, userId, userType, db) {
   try {
-    // 使用统一函数查找源路径的挂载点
-    const sourceMountResult = await findMountPointByPath(db, path, userId, userType);
+    // 使用统一函数查找源路径的挂载点 - MOVE使用操作权限
+    const sourceMountResult = await findMountPointByPath(db, path, userId, userType, "operation");
 
     // 处理错误情况
     if (sourceMountResult.error) {
@@ -47,8 +48,8 @@ export async function handleMove(c, path, userId, userType, db) {
       });
     }
 
-    // 查找目标路径的挂载点
-    const destMountResult = await findMountPointByPath(db, destPath, userId, userType);
+    // 查找目标路径的挂载点 - MOVE使用操作权限
+    const destMountResult = await findMountPointByPath(db, destPath, userId, userType, "operation");
 
     // 如果目标路径是根目录，则返回错误
     if (destMountResult.isRoot) {
@@ -205,9 +206,15 @@ export async function handleMove(c, path, userId, userType, db) {
         await s3Client.send(deleteCommand);
       }
 
+      // 更新父目录的修改时间
+      const rootPrefix = s3Config.root_prefix ? (s3Config.root_prefix.endsWith("/") ? s3Config.root_prefix : s3Config.root_prefix + "/") : "";
+      const { updateParentDirectoriesModifiedTime } = await import("../../services/fsService.js");
+      await updateParentDirectoriesModifiedTime(s3Client, s3Config.bucket_name, sourceS3SubPath, rootPrefix);
+      await updateParentDirectoriesModifiedTime(s3Client, s3Config.bucket_name, destS3SubPath, rootPrefix);
+
       // 清理缓存 - 对于移动目录操作，需要清理源路径和目标路径的缓存
-      await clearCacheAfterWebDAVOperation(db, sourceS3SubPath, s3Config, true);
-      await clearCacheAfterWebDAVOperation(db, destS3SubPath, s3Config, true);
+      await clearCacheAfterWebDAVOperation(db, sourceS3SubPath, s3Config, true, mount.id);
+      await clearCacheAfterWebDAVOperation(db, destS3SubPath, s3Config, true, mount.id);
     } else {
       // 处理文件移动
       // 检查源文件是否存在
@@ -245,9 +252,15 @@ export async function handleMove(c, path, userId, userType, db) {
       const deleteCommand = new DeleteObjectCommand(deleteParams);
       await s3Client.send(deleteCommand);
 
+      // 更新父目录的修改时间
+      const rootPrefix = s3Config.root_prefix ? (s3Config.root_prefix.endsWith("/") ? s3Config.root_prefix : s3Config.root_prefix + "/") : "";
+      const { updateParentDirectoriesModifiedTime } = await import("../../services/fsService.js");
+      await updateParentDirectoriesModifiedTime(s3Client, s3Config.bucket_name, sourceS3SubPath, rootPrefix);
+      await updateParentDirectoriesModifiedTime(s3Client, s3Config.bucket_name, destS3SubPath, rootPrefix);
+
       // 清理缓存 - 对于移动文件操作，需要清理源路径和目标路径的缓存
-      await clearCacheAfterWebDAVOperation(db, sourceS3SubPath, s3Config, false);
-      await clearCacheAfterWebDAVOperation(db, destS3SubPath, s3Config, false);
+      await clearCacheAfterWebDAVOperation(db, sourceS3SubPath, s3Config, false, mount.id);
+      await clearCacheAfterWebDAVOperation(db, destS3SubPath, s3Config, false, mount.id);
     }
 
     // 更新挂载点的最后使用时间
@@ -262,15 +275,7 @@ export async function handleMove(c, path, userId, userType, db) {
       },
     });
   } catch (error) {
-    console.error("MOVE请求处理错误:", error);
-    // 生成唯一错误ID用于日志追踪
-    const errorId = Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
-    console.error(`MOVE错误详情[${errorId}]:`, error);
-
-    // 对外部仅返回通用错误信息和错误ID，不暴露具体错误
-    return new Response(`内部服务器错误 (错误ID: ${errorId})`, {
-      status: 500,
-      headers: { "Content-Type": "text/plain" },
-    });
+    // 使用统一的错误处理
+    return handleWebDAVError("MOVE", error, false, false);
   }
 }

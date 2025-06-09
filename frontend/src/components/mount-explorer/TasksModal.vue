@@ -1,6 +1,6 @@
 <template>
-  <div v-if="isOpen" class="fixed inset-0 z-50 overflow-auto bg-black bg-opacity-50 flex items-center justify-center">
-    <div class="relative w-full max-w-md bg-white dark:bg-gray-800 rounded-lg shadow-xl">
+  <div v-if="isOpen" class="fixed inset-0 z-[60] overflow-auto bg-black bg-opacity-50 flex items-center justify-center p-2 sm:p-4 pt-20 sm:pt-4">
+    <div class="relative w-full max-w-sm sm:max-w-md bg-white dark:bg-gray-800 rounded-lg shadow-xl max-h-[85vh] sm:max-h-[80vh] overflow-hidden">
       <!-- 标题栏 -->
       <div class="px-4 py-3 border-b flex justify-between items-center" :class="darkMode ? 'border-gray-700' : 'border-gray-200'">
         <h3 class="text-lg font-medium" :class="darkMode ? 'text-gray-100' : 'text-gray-900'">任务管理</h3>
@@ -12,14 +12,14 @@
       </div>
 
       <!-- 内容区 -->
-      <div class="p-4">
+      <div class="p-3 sm:p-4 overflow-y-auto" style="max-height: calc(85vh - 140px)">
         <div v-if="activeTasks.length === 0 && completedTasks.length === 0" class="text-center py-6" :class="darkMode ? 'text-gray-400' : 'text-gray-600'">
           <svg class="h-12 w-12 mx-auto mb-3 opacity-30" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
             />
           </svg>
           <p>当前没有任务</p>
@@ -44,15 +44,15 @@
               </div>
               <div class="flex items-center">
                 <!-- 任务状态标签 -->
-                <span class="px-2 py-0.5 rounded-full text-xs font-medium" :class="getStatusClass(task.status)">
-                  {{ getStatusText(task.status) }}
+                <span class="px-2 py-0.5 rounded-full text-xs font-medium" :class="getStatusClass(task.status, task)">
+                  {{ getStatusText(task.status, task) }}
                 </span>
 
                 <!-- 任务操作按钮 -->
                 <button
-                  v-if="task.status === TaskStatus.RUNNING || task.status === TaskStatus.PENDING"
-                  @click="cancelTask(task.id)"
-                  class="ml-2 text-gray-400 hover:text-red-500 dark:text-gray-500 dark:hover:text-red-400"
+                    v-if="task.status === TaskStatus.RUNNING || task.status === TaskStatus.PENDING"
+                    @click="cancelTask(task.id)"
+                    class="ml-2 text-gray-400 hover:text-red-500 dark:text-gray-500 dark:hover:text-red-400"
                 >
                   <svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
@@ -83,10 +83,11 @@
               <!-- 显示当前处理的文件 -->
               <div v-if="task.details.currentFile" class="mt-1 truncate">当前文件: {{ task.details.currentFile }}</div>
 
-              <!-- 跨存储复制完成后的统计 -->
-              <div v-if="task.details.crossStorage && task.status === TaskStatus.COMPLETED" class="mt-1">
-                <span class="text-green-500 dark:text-green-400">成功: {{ task.details.successCount || 0 }}</span>
-                <span v-if="task.details.failedCount > 0" class="ml-2 text-red-500 dark:text-red-400">失败: {{ task.details.failedCount }}</span>
+              <!-- 复制操作统计信息 - 活动任务也可能有统计 -->
+              <div v-if="task.details.successCount !== undefined || task.details.skippedCount !== undefined || task.details.failedCount !== undefined" class="mt-1 space-x-2">
+                <span v-if="task.details.successCount > 0" class="text-green-500 dark:text-green-400">成功: {{ task.details.successCount }}</span>
+                <span v-if="task.details.skippedCount > 0" class="text-yellow-500 dark:text-yellow-400">跳过: {{ task.details.skippedCount }}</span>
+                <span v-if="task.details.failedCount > 0" class="text-red-500 dark:text-red-400">失败: {{ task.details.failedCount }}</span>
               </div>
             </div>
 
@@ -116,19 +117,19 @@
               </div>
               <div class="flex items-center">
                 <!-- 任务状态标签 -->
-                <span class="px-2 py-0.5 rounded-full text-xs font-medium" :class="getStatusClass(task.status)">
-                  {{ getStatusText(task.status) }}
+                <span class="px-2 py-0.5 rounded-full text-xs font-medium" :class="getStatusClass(task.status, task)">
+                  {{ getStatusText(task.status, task) }}
                 </span>
 
                 <!-- 展开/折叠按钮 -->
                 <button @click="toggleTaskDetails(task.id)" class="ml-2 text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300">
                   <svg
-                    class="h-4 w-4 transition-transform"
-                    :class="{ 'transform rotate-180': isTaskExpanded(task.id) }"
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
+                      class="h-4 w-4 transition-transform"
+                      :class="{ 'transform rotate-180': isTaskExpanded(task.id) }"
+                      xmlns="http://www.w3.org/2000/svg"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
                   >
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
                   </svg>
@@ -139,16 +140,37 @@
             <!-- 任务详情 - 仅在展开时显示 -->
             <div v-if="isTaskExpanded(task.id)" class="mt-2 pt-2 border-t" :class="darkMode ? 'border-gray-700' : 'border-gray-200'">
               <!-- 完成时间 -->
-              <div class="text-xs" :class="darkMode ? 'text-gray-400' : 'text-gray-500'">完成时间: {{ new Date(task.updatedAt).toLocaleString() }}</div>
+              <div class="text-xs" :class="darkMode ? 'text-gray-400' : 'text-gray-500'">完成时间: {{ formatDateTime(task.updatedAt) }}</div>
 
               <!-- 任务详情 -->
               <div v-if="task.details && Object.keys(task.details).length > 0" class="mt-1 text-xs" :class="darkMode ? 'text-gray-400' : 'text-gray-500'">
                 <div v-if="task.details.processed && task.details.total">处理项目: {{ formatProgress(task.details.processed, task.details.total) }}</div>
 
-                <!-- 跨存储复制完成后的统计 -->
-                <div v-if="task.details.crossStorage && task.status === TaskStatus.COMPLETED" class="mt-1">
-                  <span class="text-green-500 dark:text-green-400">成功: {{ task.details.successCount || 0 }}</span>
-                  <span v-if="task.details.failedCount > 0" class="ml-2 text-red-500 dark:text-red-400">失败: {{ task.details.failedCount }}</span>
+                <!-- 复制操作统计信息 -->
+                <div
+                    v-if="
+                    task.status === TaskStatus.COMPLETED &&
+                    (task.details.successCount !== undefined || task.details.skippedCount !== undefined || task.details.failedCount !== undefined)
+                  "
+                    class="mt-1 space-x-2"
+                >
+                  <span v-if="task.details.successCount > 0" class="text-green-500 dark:text-green-400">成功: {{ task.details.successCount }}</span>
+                  <span v-if="task.details.skippedCount > 0" class="text-yellow-500 dark:text-yellow-400">跳过: {{ task.details.skippedCount }}</span>
+                  <span v-if="task.details.failedCount > 0" class="text-red-500 dark:text-red-400">失败: {{ task.details.failedCount }}</span>
+                </div>
+
+                <!-- 部分成功状态提示 -->
+                <div v-if="task.details.partialSuccess" class="mt-1">
+                  <span class="text-orange-500 dark:text-orange-400 text-xs">{{ task.details.status || "部分完成" }}</span>
+                </div>
+
+                <!-- 任务消息 -->
+                <div
+                    v-if="task.details.message"
+                    class="mt-1 text-xs"
+                    :class="task.details.partialSuccess ? 'text-orange-600 dark:text-orange-400' : darkMode ? 'text-gray-400' : 'text-gray-500'"
+                >
+                  {{ task.details.message }}
                 </div>
               </div>
 
@@ -166,9 +188,9 @@
         <!-- 清除已完成按钮 -->
         <div v-if="completedTasks.length > 0" class="mt-4 flex justify-end space-x-2">
           <button
-            @click="clearCompleted"
-            class="text-xs px-3 py-1 rounded transition-colors"
-            :class="darkMode ? 'text-gray-400 hover:bg-gray-700' : 'text-gray-600 hover:bg-gray-100'"
+              @click="clearCompleted"
+              class="text-xs px-3 py-1 rounded transition-colors"
+              :class="darkMode ? 'text-gray-400 hover:bg-gray-700' : 'text-gray-600 hover:bg-gray-100'"
           >
             清除已完成任务
           </button>
@@ -206,8 +228,8 @@ const activeTasks = computed(() => {
 // 已完成的任务 - 使用shallowRef优化性能
 const completedTasks = computed(() => {
   return [...state.tasks]
-    .filter((task) => task.status === TaskStatus.COMPLETED || task.status === TaskStatus.FAILED || task.status === TaskStatus.CANCELLED)
-    .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+      .filter((task) => task.status === TaskStatus.COMPLETED || task.status === TaskStatus.FAILED || task.status === TaskStatus.CANCELLED)
+      .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
 });
 
 // 展开的任务ID集合
@@ -280,7 +302,12 @@ const getTaskTypeIcon = (type) => {
 };
 
 // 获取状态文本
-const getStatusText = (status) => {
+const getStatusText = (status, task = null) => {
+  // 检查是否为部分成功的任务
+  if (status === TaskStatus.COMPLETED && task && task.details && task.details.partialSuccess) {
+    return "部分完成";
+  }
+
   switch (status) {
     case TaskStatus.PENDING:
       return "等待中";
@@ -322,7 +349,12 @@ const statusClassMap = {
 };
 
 // 获取状态样式类
-const getStatusClass = (status) => {
+const getStatusClass = (status, task = null) => {
+  // 检查是否为部分成功的任务，使用橙色样式
+  if (status === TaskStatus.COMPLETED && task && task.details && task.details.partialSuccess) {
+    return props.darkMode ? "text-white bg-orange-700/50" : "bg-orange-100 text-orange-800";
+  }
+
   const statusClasses = statusClassMap[status] || statusClassMap[TaskStatus.CANCELLED];
   return props.darkMode ? statusClasses.dark : statusClasses.light;
 };
@@ -376,42 +408,17 @@ const TIME_UNITS = {
   WEEK: 604800,
 };
 
-// 获取相对时间文本 - 优化版本
+// 导入统一的时间处理工具
+import { formatRelativeTime, formatDateTime as formatDateTimeUtil } from "../../utils/timeUtils.js";
+
+// 获取相对时间文本 - 使用统一的时间处理工具
 const getTimeAgo = (dateString) => {
-  const date = new Date(dateString);
-  const now = new Date();
-  const diffInSeconds = Math.floor((now - date) / 1000);
+  return formatRelativeTime(dateString) || "未知时间";
+};
 
-  // 如果时间差小于一分钟，显示"刚刚"
-  if (diffInSeconds < TIME_UNITS.MINUTE) return "刚刚";
-
-  // 如果时间差小于一小时，显示分钟数
-  if (diffInSeconds < TIME_UNITS.HOUR) {
-    const minutes = Math.floor(diffInSeconds / TIME_UNITS.MINUTE);
-    return `${minutes}分钟前`;
-  }
-
-  // 如果时间差小于24小时，显示小时数
-  if (diffInSeconds < TIME_UNITS.DAY) {
-    const hours = Math.floor(diffInSeconds / TIME_UNITS.HOUR);
-    return `${hours}小时前`;
-  }
-
-  // 如果时间差小于7天，显示天数
-  if (diffInSeconds < TIME_UNITS.WEEK) {
-    const days = Math.floor(diffInSeconds / TIME_UNITS.DAY);
-    return `${days}天前`;
-  }
-
-  // 如果时间差大于7天，显示具体日期
-  const options = { month: "short", day: "numeric" };
-
-  // 如果不是今年，还要显示年份
-  if (date.getFullYear() !== now.getFullYear()) {
-    options.year = "numeric";
-  }
-
-  return date.toLocaleDateString(undefined, options);
+// 格式化日期时间
+const formatDateTime = (dateString) => {
+  return formatDateTimeUtil(dateString) || "未知时间";
 };
 
 // 格式化进度数值

@@ -67,6 +67,16 @@ export const UNIFIED_MIME_MAP = {
   tif: "image/tiff",
   heic: "image/heic",
   avif: "image/avif",
+  jfif: "image/jpeg",
+  jpe: "image/jpeg",
+  pjpeg: "image/jpeg",
+  pjp: "image/jpeg",
+  jxl: "image/jxl",
+  raw: "image/x-canon-cr2",
+  cr2: "image/x-canon-cr2",
+  nef: "image/x-nikon-nef",
+  arw: "image/x-sony-arw",
+  dng: "image/x-adobe-dng",
 
   // 文档
   pdf: "application/pdf",
@@ -126,6 +136,20 @@ export const UNIFIED_MIME_MAP = {
   flac: "audio/flac",
   m4a: "audio/mp4",
   aac: "audio/aac",
+  wma: "audio/x-ms-wma",
+  opus: "audio/opus",
+  ape: "audio/x-ape",
+  alac: "audio/x-alac",
+  dsd: "audio/dsd",
+  dsf: "audio/dsf",
+  dff: "audio/x-dff",
+  mid: "audio/midi",
+  midi: "audio/midi",
+  kar: "audio/midi",
+  ra: "audio/x-realaudio",
+  ram: "audio/x-pn-realaudio",
+  au: "audio/basic",
+  snd: "audio/basic",
 
   // 视频
   mp4: "video/mp4",
@@ -136,6 +160,21 @@ export const UNIFIED_MIME_MAP = {
   flv: "video/x-flv",
   mkv: "video/x-matroska",
   "3gp": "video/3gpp",
+  "3g2": "video/3gpp2",
+  m4v: "video/x-m4v",
+  mpg: "video/mpeg",
+  mpeg: "video/mpeg",
+  mpe: "video/mpeg",
+  ogv: "video/ogg",
+  vob: "video/x-ms-vob",
+  asf: "video/x-ms-asf",
+  rm: "video/x-pn-realvideo",
+  rmvb: "video/x-pn-realvideo",
+  f4v: "video/x-f4v",
+  m2ts: "video/mp2t",
+  mts: "video/mp2t",
+  divx: "video/divx",
+  xvid: "video/x-msvideo",
 
   // 压缩
   zip: "application/zip",
@@ -195,6 +234,11 @@ export const UNIFIED_MIME_MAP = {
   java: "text/x-java",
   c: "text/x-c",
   cpp: "text/x-c++",
+  cxx: "text/x-c++",
+  cc: "text/x-c++",
+  h: "text/x-c",
+  hpp: "text/x-c++",
+  hxx: "text/x-c++",
   cs: "text/x-csharp",
   php: "text/x-php",
   swift: "text/x-swift",
@@ -210,12 +254,71 @@ export const UNIFIED_MIME_MAP = {
   zsh: "text/x-zsh",
   fish: "text/x-fish",
   vue: "text/x-vue",
+  sass: "text/x-sass",
+  scss: "text/x-scss",
+  less: "text/x-less",
+  styl: "text/x-stylus",
+  coffee: "text/x-coffeescript",
+  elm: "text/x-elm",
+  haskell: "text/x-haskell",
+  hs: "text/x-haskell",
+  ml: "text/x-ocaml",
+  fs: "text/x-fsharp",
+  vb: "text/x-vb",
+  pas: "text/x-pascal",
+  asm: "text/x-asm",
+  s: "text/x-asm",
+  bat: "text/x-msdos-batch",
+  cmd: "text/x-msdos-batch",
+  ps1: "text/x-powershell",
+  psm1: "text/x-powershell",
+  psd1: "text/x-powershell",
 
-  // 其他
+  // 其他常见文件类型
   bin: "application/octet-stream",
   dat: "application/octet-stream",
   log: "text/plain",
   iso: "application/x-iso9660-image",
+  img: "application/x-img",
+  vhd: "application/x-virtualbox-vhd",
+  vmdk: "application/x-virtualbox-vmdk",
+  ova: "application/x-virtualbox-ova",
+  ovf: "application/x-virtualbox-ovf",
+
+  // 证书和密钥文件
+  crt: "application/x-x509-ca-cert",
+  cer: "application/x-x509-ca-cert",
+  pem: "application/x-pem-file",
+  key: "application/x-pem-file",
+  p12: "application/x-pkcs12",
+  pfx: "application/x-pkcs12",
+  jks: "application/x-java-keystore",
+
+  // 数据交换格式
+  protobuf: "application/x-protobuf",
+  proto: "text/x-proto",
+  avro: "application/avro",
+  parquet: "application/x-parquet",
+
+  // 配置和脚本文件
+  dockerfile: "text/x-dockerfile",
+  makefile: "text/x-makefile",
+  cmake: "text/x-cmake",
+  gradle: "text/x-gradle",
+  ant: "text/xml",
+
+  // 文档格式
+  tex: "text/x-tex",
+  bib: "text/x-bibtex",
+  rst: "text/x-rst",
+  adoc: "text/x-asciidoc",
+  org: "text/x-org",
+
+  // 数据文件
+  tsv: "text/tab-separated-values",
+  psv: "text/psv",
+  ndjson: "application/x-ndjson",
+  jsonl: "application/x-ndjson",
 };
 
 /**
@@ -303,6 +406,46 @@ export function isAudioType(mimeType) {
 export function isDocumentType(mimeType) {
   const group = getMimeTypeGroup(mimeType);
   return group === MIME_GROUPS.DOCUMENT || group === MIME_GROUPS.PDF || group === MIME_GROUPS.MARKDOWN || group === MIME_GROUPS.TEXT;
+}
+
+/**
+ * 检查文件是否为Office文件类型
+ * @param {string} mimeType - MIME类型
+ * @param {string} filename - 文件名（可选）
+ * @returns {boolean} 是否为Office文件
+ */
+export function isOfficeFile(mimeType, filename) {
+  const mime = (mimeType || "").toLowerCase();
+  const name = (filename || "").toLowerCase();
+
+  // 通过MIME类型检查
+  if (
+      mime.includes("wordprocessing") ||
+      mime.includes("spreadsheet") ||
+      mime.includes("presentation") ||
+      mime === "application/msword" ||
+      mime === "application/vnd.ms-excel" ||
+      mime === "application/vnd.ms-powerpoint"
+  ) {
+    return true;
+  }
+
+  // 通过文件扩展名检查
+  if (
+      name.endsWith(".doc") ||
+      name.endsWith(".docx") ||
+      name.endsWith(".xls") ||
+      name.endsWith(".xlsx") ||
+      name.endsWith(".ppt") ||
+      name.endsWith(".pptx") ||
+      name.endsWith(".odt") ||
+      name.endsWith(".ods") ||
+      name.endsWith(".odp")
+  ) {
+    return true;
+  }
+
+  return false;
 }
 
 /**
@@ -486,44 +629,16 @@ export function getContentTypeAndDisposition(options) {
 export function getMimeTypeAndGroupFromFile(fileInfo) {
   const { filename, mimetype: originalMimeType = "application/octet-stream" } = fileInfo;
 
-  // 记录原始MIME类型
-  let resultMimeType = originalMimeType;
+  // 统一从文件名推断MIME类型，不依赖传入的mimetype参数
+  let resultMimeType = "application/octet-stream";
 
-  // 检查是否为通用MIME类型或未指定 (application/octet-stream 或 text/plain)
-  const isGenericMimeType = originalMimeType === "application/octet-stream" || originalMimeType === "text/plain";
-
-  // 如果是通用MIME类型，尝试从文件名推断
-  if (isGenericMimeType && filename) {
-    // 直接使用getMimeTypeFromFilename获取MIME类型
-    const inferredMimeType = getMimeTypeFromFilename(filename);
-
-    // 仅当推断的MIME类型不是通用类型时才使用推断的类型
-    if (inferredMimeType !== "application/octet-stream") {
-      resultMimeType = inferredMimeType;
-    }
+  if (filename) {
+    resultMimeType = getMimeTypeFromFilename(filename);
+    console.log(`getMimeTypeAndGroupFromFile：从文件名[${filename}]推断MIME类型: ${resultMimeType}`);
   }
 
   // 获取MIME分组
   const mimeGroup = getMimeTypeGroup(resultMimeType);
-
-  // 如果分组仍是UNKNOWN或EXECUTABLE，且有文件名，再次检查文件扩展名
-  if ((mimeGroup === MIME_GROUPS.UNKNOWN || mimeGroup === MIME_GROUPS.EXECUTABLE) && filename) {
-    const ext = getFileExtension(filename);
-
-    // 直接从UNIFIED_MIME_MAP获取MIME类型
-    if (UNIFIED_MIME_MAP[ext]) {
-      resultMimeType = UNIFIED_MIME_MAP[ext];
-
-      // 重新获取MIME分组
-      const updatedMimeGroup = getMimeTypeGroup(resultMimeType);
-
-      return {
-        mimeType: resultMimeType,
-        mimeGroup: updatedMimeGroup,
-        wasRefined: resultMimeType !== originalMimeType,
-      };
-    }
-  }
 
   return {
     mimeType: resultMimeType,

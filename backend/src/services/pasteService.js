@@ -1,5 +1,5 @@
 import { DbTables, ApiStatus } from "../constants/index.js";
-import { generateRandomString, getLocalTimeString, createErrorResponse } from "../utils/common.js";
+import { generateRandomString, createErrorResponse } from "../utils/common.js";
 import { hashPassword, verifyPassword } from "../utils/crypto.js";
 import { HTTPException } from "hono/http-exception";
 import { checkAndDeleteExpiredApiKey } from "./apiKeyService.js";
@@ -53,7 +53,7 @@ export async function generateUniqueSlug(db, customSlug = null) {
  */
 export async function incrementPasteViews(db, pasteId, maxViews) {
   // 增加查看次数
-  await db.prepare(`UPDATE ${DbTables.PASTES} SET views = views + 1, updated_at = ? WHERE id = ?`).bind(getLocalTimeString(), pasteId).run();
+  await db.prepare(`UPDATE ${DbTables.PASTES} SET views = views + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).bind(pasteId).run();
 
   if (maxViews && maxViews > 0) {
     const updatedPaste = await db.prepare(`SELECT views FROM ${DbTables.PASTES} WHERE id = ?`).bind(pasteId).first();

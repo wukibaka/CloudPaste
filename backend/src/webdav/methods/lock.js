@@ -24,8 +24,8 @@ export async function handleLock(c, path, userId, userType, db) {
     // 记录锁定请求信息
     console.log(`WebDAV LOCK请求: 路径 ${path}, 用户类型: ${userType}, 客户端: ${isWindowsClient ? "Windows" : "其他"}`);
 
-    // 使用统一函数查找挂载点
-    const mountResult = await findMountPointByPath(db, path, userId, userType);
+    // 使用统一函数查找挂载点 - LOCK使用读取权限
+    const mountResult = await findMountPointByPath(db, path, userId, userType, "read");
 
     // 处理错误情况
     if (mountResult.error) {
@@ -62,7 +62,7 @@ export async function handleLock(c, path, userId, userType, db) {
 
     // 清理缓存 - 即使当前并未实际修改文件，还是清理缓存以保持一致性
     // 注意：实际锁定不会修改文件内容，所以这里清理缓存主要是为了代码一致性
-    await clearCacheAfterWebDAVOperation(db, s3SubPath, s3Config, isDirectory);
+    await clearCacheAfterWebDAVOperation(db, s3SubPath, s3Config, isDirectory, mount.id);
 
     // 更新挂载点的最后使用时间
     await updateMountLastUsed(db, mount.id);

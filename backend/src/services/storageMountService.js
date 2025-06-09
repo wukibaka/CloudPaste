@@ -3,25 +3,28 @@
  */
 import { DbTables, ApiStatus } from "../constants/index.js";
 import { HTTPException } from "hono/http-exception";
-import { getLocalTimeString, generateUUID } from "../utils/common.js";
+import { generateUUID } from "../utils/common.js";
 
 /**
  * 获取管理员的挂载点列表
  * @param {D1Database} db - D1数据库实例
  * @param {string} adminId - 管理员ID
+ * @param {boolean} includeInactive - 是否包含禁用的挂载点，默认为false
  * @returns {Promise<Array>} 挂载点列表
  * @throws {Error} 数据库操作错误
  */
-export async function getMountsByAdmin(db, adminId) {
+export async function getMountsByAdmin(db, adminId, includeInactive = false) {
+  const whereClause = includeInactive ? "WHERE created_by = ?" : "WHERE created_by = ? AND is_active = 1";
+
   const mounts = await db
       .prepare(
           `
-      SELECT 
-        id, name, storage_type, storage_config_id, mount_path, 
+      SELECT
+        id, name, storage_type, storage_config_id, mount_path,
         remark, is_active, created_by, sort_order, cache_ttl,
         created_at, updated_at, last_used
       FROM ${DbTables.STORAGE_MOUNTS}
-      WHERE created_by = ?
+      ${whereClause}
       ORDER BY sort_order ASC, name ASC
       `
       )
@@ -34,18 +37,22 @@ export async function getMountsByAdmin(db, adminId) {
 /**
  * 获取所有挂载点列表（管理员专用）
  * @param {D1Database} db - D1数据库实例
+ * @param {boolean} includeInactive - 是否包含禁用的挂载点，默认为true（管理员界面需要看到所有挂载点）
  * @returns {Promise<Array>} 所有挂载点列表
  * @throws {Error} 数据库操作错误
  */
-export async function getAllMounts(db) {
+export async function getAllMounts(db, includeInactive = true) {
+  const whereClause = includeInactive ? "" : "WHERE is_active = 1";
+
   const mounts = await db
       .prepare(
           `
-      SELECT 
-        id, name, storage_type, storage_config_id, mount_path, 
+      SELECT
+        id, name, storage_type, storage_config_id, mount_path,
         remark, is_active, created_by, sort_order, cache_ttl,
         created_at, updated_at, last_used
       FROM ${DbTables.STORAGE_MOUNTS}
+      ${whereClause}
       ORDER BY sort_order ASC, name ASC
       `
       )
@@ -167,6 +174,12 @@ function validateMountPath(mountPath) {
   if (mountPath.includes("//")) {
     throw new HTTPException(ApiStatus.BAD_REQUEST, { message: "挂载路径不能包含连续的斜杠" });
   }
+  // 特殊处理根路径
+  if (mountPath === "/") {
+    // 根路径是有效的，直接返回
+    return;
+  }
+
   // 支持Unicode字符但排除特殊符号
   const validPathRegex = /^\/(?:[A-Za-z0-9_\-\/]|[\u4e00-\u9fa5]|[\u0080-\uFFFF])+$/;
   if (!validPathRegex.test(mountPath)) {
@@ -262,30 +275,17 @@ export async function createMount(db, mountData, creatorId) {
       .prepare(
           `
       INSERT INTO ${DbTables.STORAGE_MOUNTS} (
-        id, name, storage_type, storage_config_id, mount_path, 
+        id, name, storage_type, storage_config_id, mount_path,
         remark, is_active, created_by, sort_order, cache_ttl,
         created_at, updated_at
       ) VALUES (
-        ?, ?, ?, ?, ?, 
         ?, ?, ?, ?, ?,
-        ?, ?
+        ?, ?, ?, ?, ?,
+        CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
       )
     `
       )
-      .bind(
-          id,
-          mountData.name,
-          mountData.storage_type,
-          mountData.storage_config_id || null,
-          mountData.mount_path,
-          mountData.remark || null,
-          isActive,
-          creatorId,
-          sortOrder,
-          cacheTtl,
-          getLocalTimeString(),
-          getLocalTimeString()
-      )
+      .bind(id, mountData.name, mountData.storage_type, mountData.storage_config_id || null, mountData.mount_path, mountData.remark || null, isActive, creatorId, sortOrder, cacheTtl)
       .run();
 
   // 返回创建的挂载点
@@ -300,8 +300,8 @@ export async function createMount(db, mountData, creatorId) {
     created_by: creatorId,
     sort_order: sortOrder,
     cache_ttl: cacheTtl,
-    created_at: getLocalTimeString(),
-    updated_at: getLocalTimeString(),
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
   };
 }
 
@@ -436,8 +436,7 @@ export async function updateMount(db, id, updateData, creatorId, isAdmin = false
   }
 
   // 添加更新时间
-  updateFields.push("updated_at = ?");
-  updateParams.push(getLocalTimeString());
+  updateFields.push("updated_at = CURRENT_TIMESTAMP");
 
   // 构建更新SQL
   const sql = `
@@ -489,5 +488,5 @@ export async function deleteMount(db, id, creatorId, isAdmin = false) {
  * @throws {Error} 数据库操作错误
  */
 export async function updateMountLastUsed(db, id) {
-  await db.prepare(`UPDATE ${DbTables.STORAGE_MOUNTS} SET last_used = ? WHERE id = ?`).bind(getLocalTimeString(), id).run();
+  await db.prepare(`UPDATE ${DbTables.STORAGE_MOUNTS} SET last_used = CURRENT_TIMESTAMP WHERE id = ?`).bind(id).run();
 }

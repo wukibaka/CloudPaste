@@ -1,9 +1,9 @@
 <template>
-  <div class="fixed inset-0 z-50 overflow-auto bg-black bg-opacity-50 flex items-center justify-center p-4">
-    <div class="relative bg-white dark:bg-gray-800 rounded-lg max-w-lg w-full mx-auto shadow-xl overflow-hidden">
+  <div class="fixed inset-0 z-[60] overflow-auto bg-black bg-opacity-50 flex items-center justify-center p-2 sm:p-4 pt-20 sm:pt-4">
+    <div class="relative bg-white dark:bg-gray-800 rounded-lg max-w-sm sm:max-w-lg w-full mx-auto shadow-xl overflow-hidden max-h-[95vh] sm:max-h-[85vh]">
       <!-- 标题栏 -->
-      <div class="px-6 py-4 border-b flex justify-between items-center" :class="darkMode ? 'border-gray-700' : 'border-gray-200'">
-        <h3 class="text-lg font-medium" :class="darkMode ? 'text-white' : 'text-gray-900'">文件详情</h3>
+      <div class="px-4 sm:px-6 py-3 sm:py-4 border-b flex justify-between items-center" :class="darkMode ? 'border-gray-700' : 'border-gray-200'">
+        <h3 class="text-base sm:text-lg font-medium" :class="darkMode ? 'text-white' : 'text-gray-900'">文件详情</h3>
         <button @click="$emit('close')" class="text-gray-400 hover:text-gray-500">
           <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
@@ -12,7 +12,7 @@
       </div>
 
       <!-- 文件内容 -->
-      <div class="px-6 py-4">
+      <div class="px-4 sm:px-6 py-3 sm:py-4 overflow-y-auto" style="max-height: calc(95vh - 160px)">
         <div class="space-y-4">
           <!-- 基本信息 -->
           <div>
@@ -116,9 +116,9 @@
             </div>
 
             <button
-              @click="$emit('close')"
-              class="px-4 py-2 rounded-md text-sm font-medium transition-colors"
-              :class="darkMode ? 'bg-gray-700 hover:bg-gray-600 text-white' : 'bg-gray-200 hover:bg-gray-300 text-gray-700'"
+                @click="$emit('close')"
+                class="px-4 py-2 rounded-md text-sm font-medium transition-colors"
+                :class="darkMode ? 'bg-gray-700 hover:bg-gray-600 text-white' : 'bg-gray-200 hover:bg-gray-300 text-gray-700'"
             >
               关闭
             </button>
@@ -252,23 +252,16 @@ const formatFileSize = (bytes) => {
   return parseFloat((bytes / Math.pow(1024, i)).toFixed(2)) + " " + sizes[i];
 };
 
+// 导入统一的时间处理工具
+import { formatDateTimeWithSeconds } from "../../../utils/timeUtils.js";
+
 /**
  * 格式化日期时间
- * @param {string} dateString - ISO格式的日期字符串
- * @returns {string} 格式化后的日期时间
+ * @param {string} dateString - UTC 时间字符串
+ * @returns {string} 格式化后的本地时间字符串
  */
 const formatDateTime = (dateString) => {
-  if (!dateString) return "未知";
-
-  const date = new Date(dateString);
-  return date.toLocaleString("zh-CN", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
+  return formatDateTimeWithSeconds(dateString);
 };
 
 /**

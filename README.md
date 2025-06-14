@@ -1040,6 +1040,12 @@ Apache License 2.0
 
 This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
 
+## ❤️ Contribution
+- **Sponsorship**: Maintaining a project is not easy. If you like this project, consider giving the author a little encouragement. Every bit of your support is my motivation to keep going~
+
+  <a href="https://afdian.com/a/drag0n"><img width="200" src="https://pic1.afdiancdn.com/static/img/welcome/button-sponsorme.png" alt=""></a>
+
+
 ## Star History
 
 [![Star History Chart](https://api.star-history.com/svg?repos=ling-drag0n/CloudPaste&type=Date)](https://star-history.com/#ling-drag0n/CloudPaste&Date)

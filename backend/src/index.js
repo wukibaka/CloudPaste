@@ -19,8 +19,7 @@ import { registerUserFilesRoutes } from "./routes/userFilesRoutes.js";
 import { registerS3UploadRoutes } from "./routes/s3UploadRoutes.js";
 import { registerFileViewRoutes } from "./routes/fileViewRoutes.js";
 import { registerUrlUploadRoutes } from "./routes/urlUploadRoutes.js";
-import { authMiddleware } from "./middlewares/authMiddleware.js";
-import { apiKeyFileMiddleware } from "./middlewares/apiKeyMiddleware.js";
+import { baseAuthMiddleware, requireAdminMiddleware, requireFilePermissionMiddleware } from "./middlewares/permissionMiddleware.js";
 
 // 创建一个Hono应用实例
 const app = new Hono();
@@ -60,8 +59,8 @@ app.use(
 );
 
 // 文件API路由的中间件（确保在路由注册前添加）
-app.use("/api/admin/files/*", authMiddleware);
-app.use("/api/user/files/*", apiKeyFileMiddleware);
+app.use("/api/admin/files/*", baseAuthMiddleware, requireAdminMiddleware);
+app.use("/api/user/files/*", baseAuthMiddleware, requireFilePermissionMiddleware);
 
 // 注册路由
 app.route("/", adminRoutes);

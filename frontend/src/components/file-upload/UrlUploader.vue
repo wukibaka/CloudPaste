@@ -524,12 +524,12 @@ const formData = reactive({
 // 计算属性：显示友好的文件大小
 const displayFileSize = computed(() => {
   // 如果有明确的大小信息，使用它
-  if (fileInfo.value && fileInfo.value.size && fileInfo.value.size > 1024) {
+  if (fileInfo.value && fileInfo.value.size !== null && fileInfo.value.size !== undefined && fileInfo.value.size > 0) {
     return formatFileSize(fileInfo.value.size);
   }
 
-  // 如果没有明确的大小或大小太小（可能是Range请求的1KB），显示"未知大小"或"估计大小"
-  return t("file.unknownSize") || "未知大小";
+  // 如果没有大小信息，显示"未知大小"
+  return t("file.unknownSize");
 });
 
 // 计算属性：显示友好的MIME类型
@@ -637,7 +637,7 @@ const analyzeUrl = async () => {
   try {
     // 验证URL格式
     if (!isValidUrl(urlInput.value)) {
-      urlError.value = t("file.invalidUrl");
+      urlError.value = t("file.messages.invalidUrl");
       isAnalyzing.value = false;
       return;
     }
@@ -654,12 +654,12 @@ const analyzeUrl = async () => {
       const data = {
         url: metadata.url,
         filename: metadata.filename,
-        contentType: metadata.contentType,
+        contentType: metadata.enhancedContentType || metadata.contentType,
         size: metadata.size,
         lastModified: metadata.lastModified,
         corsSupported: metadata.corsSupported,
         // 兼容性字段
-        mimetype: metadata.contentType,
+        mimetype: metadata.enhancedContentType || metadata.contentType,
         // 增强检测信息
         detectionMethod: metadata.detectionMethod,
         detectionConfidence: metadata.detectionConfidence,
@@ -691,7 +691,7 @@ const analyzeUrl = async () => {
     }
   } catch (error) {
     console.error("URL验证失败:", error);
-    urlError.value = error.message || t("file.urlAnalysisFailed");
+    urlError.value = error.message || t("file.messages.urlAnalysisFailed");
   } finally {
     isAnalyzing.value = false;
   }
@@ -759,7 +759,7 @@ const validateCustomLink = () => {
   // 验证格式：只允许字母、数字、连字符、下划线
   const slugRegex = /^[a-zA-Z0-9_-]+$/;
   if (!slugRegex.test(formData.slug)) {
-    slugError.value = t("file.invalidFormat");
+    slugError.value = t("file.messages.slugInvalid");
     return false;
   }
 
@@ -804,7 +804,7 @@ const submitUpload = async () => {
 
   // 验证可打开次数，确保是非负整数
   if (formData.max_views < 0) {
-    emit("upload-error", new Error(t("file.negativeMaxViews")));
+    emit("upload-error", new Error(t("file.messages.negativeMaxViews")));
     return;
   }
 
@@ -821,7 +821,7 @@ const submitUpload = async () => {
     const maxUrlLength = 100;
     const shortUrl = urlInput.value.length > maxUrlLength ? urlInput.value.substring(0, maxUrlLength) + "..." : urlInput.value;
 
-    formData.remark = `[url直链]${shortUrl}`;
+    formData.remark = `[${t("file.urlUpload.urlUpload")}]${shortUrl}`;
   }
 
   isUploading.value = true;
@@ -889,7 +889,7 @@ const presignedDirectUpload = async () => {
     });
 
     if (!presignedResponse.success || !presignedResponse.data) {
-      throw new Error(t("file.getPresignedUrlFailed"));
+      throw new Error(t("file.messages.getPresignedUrlFailed"));
     }
 
     // 保存文件ID
@@ -897,7 +897,7 @@ const presignedDirectUpload = async () => {
 
     // 如果已经取消，则中止上传
     if (isCancelled.value) {
-      throw new Error(t("file.uploadCancelled"));
+      throw new Error(t("file.messages.uploadCancelled"));
     }
 
     uploadProgress.value = 10;
@@ -945,7 +945,7 @@ const presignedDirectUpload = async () => {
 
     // 如果已经取消，则中止上传
     if (isCancelled.value) {
-      throw new Error(t("file.uploadCancelled"));
+      throw new Error(t("file.messages.uploadCancelled"));
     }
 
     // 3. 提交完成信息
@@ -1057,7 +1057,7 @@ const chunkedMultipartUpload = async () => {
       if (activeXhr.value) {
         activeXhr.value = null;
       }
-      throw new Error(t("file.uploadCancelled"));
+      throw new Error(t("file.messages.uploadCancelled"));
     }
 
     // 步骤2: 准备分片信息 (35% -> 40%)
@@ -1094,7 +1094,7 @@ const chunkedMultipartUpload = async () => {
     });
 
     if (!initResult.success || !initResult.data) {
-      throw new Error(t("file.initMultipartUploadFailed"));
+      throw new Error(t("file.messages.initMultipartUploadFailed"));
     }
 
     // 保存文件ID和上传ID

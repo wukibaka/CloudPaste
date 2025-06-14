@@ -3,6 +3,7 @@ import { ref, watchEffect, onMounted, onBeforeUnmount, computed } from "vue";
 import { useRoute } from "vue-router";
 import EnvSwitcher from "./components/EnvSwitcher.vue";
 import LanguageSwitcher from "./components/LanguageSwitcher.vue";
+import PWAInstallPrompt from "./components/PWAInstallPrompt.vue";
 
 const route = useRoute();
 
@@ -270,7 +271,7 @@ onBeforeUnmount(() => {
                 'p-2 rounded-full focus:outline-none transition-colors mr-2',
                 isDarkMode ? 'text-yellow-300 hover:text-yellow-200 hover:bg-gray-700' : 'text-gray-400 hover:text-gray-500 hover:bg-gray-100',
               ]"
-                aria-label="切换主题"
+                :aria-label="$t('theme.toggle')"
             >
               <span class="sr-only">{{ $t("theme.toggle") }}</span>
               <!-- 自动模式图标 - 半亮半暗 -->
@@ -310,7 +311,7 @@ onBeforeUnmount(() => {
                   : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100',
               ]"
                 :aria-expanded="isMobileMenuOpen"
-                aria-label="主菜单"
+                :aria-label="$t('nav.menu')"
             >
               <!-- 菜单图标 -->
               <svg v-if="!isMobileMenuOpen" class="h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -409,7 +410,10 @@ onBeforeUnmount(() => {
     </footer>
 
     <!-- 添加环境切换器组件 (在开发环境或管理员登录状态下显示) -->
-    <EnvSwitcher v-if="showEnvSwitcher" />
+    <!-- <EnvSwitcher v-if="showEnvSwitcher" /> -->
+
+    <!-- PWA 安装提示组件 -->
+    <PWAInstallPrompt :dark-mode="isDarkMode" />
   </div>
 </template>
 
@@ -457,5 +461,4 @@ main {
 * {
   -webkit-tap-highlight-color: transparent;
 }
-
 </style>

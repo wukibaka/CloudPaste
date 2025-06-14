@@ -5,6 +5,8 @@ import { deleteFileFromS3 } from "../utils/s3Utils.js";
 import { hashPassword } from "../utils/crypto.js";
 import { generateFileDownloadUrl } from "../services/fileService.js";
 import { directoryCacheManager, clearCache } from "../utils/DirectoryCache.js";
+import { baseAuthMiddleware, requireAdminMiddleware } from "../middlewares/permissionMiddleware.js";
+import { PermissionUtils } from "../utils/permissionUtils.js";
 
 /**
  * 管理员文件路由
@@ -17,9 +19,8 @@ import { directoryCacheManager, clearCache } from "../utils/DirectoryCache.js";
  */
 export function registerAdminFilesRoutes(app) {
   // 获取文件列表（仅管理员权限）
-  app.get("/api/admin/files", async (c) => {
+  app.get("/api/admin/files", baseAuthMiddleware, requireAdminMiddleware, async (c) => {
     const db = c.env.DB;
-    const adminId = c.get("adminId");
 
     try {
       // 查询所有文件（可选带分页）
@@ -144,7 +145,7 @@ export function registerAdminFilesRoutes(app) {
   });
 
   // 获取单个文件详情（仅管理员权限）
-  app.get("/api/admin/files/:id", async (c) => {
+  app.get("/api/admin/files/:id", baseAuthMiddleware, requireAdminMiddleware, async (c) => {
     const db = c.env.DB;
     const { id } = c.req.param();
     const encryptionSecret = c.env.ENCRYPTION_SECRET || "default-encryption-key";
@@ -215,7 +216,7 @@ export function registerAdminFilesRoutes(app) {
   });
 
   // 删除文件（管理员）
-  app.delete("/api/admin/files/:id", async (c) => {
+  app.delete("/api/admin/files/:id", baseAuthMiddleware, requireAdminMiddleware, async (c) => {
     const db = c.env.DB;
     const { id } = c.req.param();
 
@@ -278,7 +279,7 @@ export function registerAdminFilesRoutes(app) {
   });
 
   // 管理员更新文件元数据
-  app.put("/api/admin/files/:id", async (c) => {
+  app.put("/api/admin/files/:id", baseAuthMiddleware, requireAdminMiddleware, async (c) => {
     const db = c.env.DB;
     const { id } = c.req.param();
     const body = await c.req.json();

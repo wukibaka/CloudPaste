@@ -5,6 +5,14 @@ import { deleteFileFromS3 } from "../utils/s3Utils.js";
 import { hashPassword, verifyPassword } from "../utils/crypto.js";
 import { getFileBySlug, isFileAccessible, incrementAndCheckFileViews, generateFileDownloadUrl, getPublicFileInfo } from "../services/fileService.js";
 import { directoryCacheManager, clearCache } from "../utils/DirectoryCache.js";
+import { baseAuthMiddleware, createFlexiblePermissionMiddleware } from "../middlewares/permissionMiddleware.js";
+import { PermissionUtils, PermissionType } from "../utils/permissionUtils.js";
+
+// 创建文件权限中间件（管理员或API密钥文件权限）
+const requireFilePermissionMiddleware = createFlexiblePermissionMiddleware({
+  permissions: [PermissionType.FILE],
+  allowAdmin: true,
+});
 
 /**
  * 用户文件路由
@@ -172,10 +180,10 @@ export function registerUserFilesRoutes(app) {
   });
 
   // API密钥用户获取自己的文件列表
-  app.get("/api/user/files", async (c) => {
+  app.get("/api/user/files", baseAuthMiddleware, requireFilePermissionMiddleware, async (c) => {
     const db = c.env.DB;
-    const apiKeyId = c.get("apiKeyId");
-    const apiKeyInfo = c.get("apiKeyInfo");
+    const apiKeyId = PermissionUtils.getUserId(c);
+    const apiKeyInfo = PermissionUtils.getApiKeyInfo(c);
 
     try {
       // 查询用户文件（支持分页）
@@ -285,9 +293,9 @@ export function registerUserFilesRoutes(app) {
   });
 
   // API密钥用户获取单个文件详情
-  app.get("/api/user/files/:id", async (c) => {
+  app.get("/api/user/files/:id", baseAuthMiddleware, requireFilePermissionMiddleware, async (c) => {
     const db = c.env.DB;
-    const apiKeyId = c.get("apiKeyId");
+    const apiKeyId = PermissionUtils.getUserId(c);
     const { id } = c.req.param();
     const encryptionSecret = c.env.ENCRYPTION_SECRET || "default-encryption-key";
 
@@ -361,9 +369,9 @@ export function registerUserFilesRoutes(app) {
   });
 
   // API密钥用户删除自己的文件
-  app.delete("/api/user/files/:id", async (c) => {
+  app.delete("/api/user/files/:id", baseAuthMiddleware, requireFilePermissionMiddleware, async (c) => {
     const db = c.env.DB;
-    const apiKeyId = c.get("apiKeyId");
+    const apiKeyId = PermissionUtils.getUserId(c);
     const { id } = c.req.param();
 
     try {
@@ -422,9 +430,9 @@ export function registerUserFilesRoutes(app) {
   });
 
   // API密钥用户更新自己文件的元数据
-  app.put("/api/user/files/:id", async (c) => {
+  app.put("/api/user/files/:id", baseAuthMiddleware, requireFilePermissionMiddleware, async (c) => {
     const db = c.env.DB;
-    const apiKeyId = c.get("apiKeyId");
+    const apiKeyId = PermissionUtils.getUserId(c);
     const { id } = c.req.param();
     const body = await c.req.json();
 

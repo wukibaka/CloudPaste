@@ -2,100 +2,100 @@
   <div class="file-actions flex flex-wrap gap-3">
     <!-- 预览按钮 -->
     <button
-        v-if="fileUrls.previewUrl"
-        @click="previewFile"
-        class="action-button flex items-center justify-center px-4 py-2 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 bg-indigo-600 hover:bg-indigo-700 text-white focus:ring-indigo-500 focus:ring-offset-white dark:focus:ring-offset-gray-800"
+      v-if="fileUrls.previewUrl"
+      @click="previewFile"
+      class="action-button flex items-center justify-center px-4 py-2 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 bg-indigo-600 hover:bg-indigo-700 text-white focus:ring-indigo-500 focus:ring-offset-white dark:focus:ring-offset-gray-800"
     >
       <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
         <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
         />
       </svg>
-      <span>预览文件</span>
+      <span>{{ t("fileView.actions.preview") }}</span>
     </button>
 
     <!-- 下载按钮 -->
     <button
-        v-if="fileUrls.downloadUrl"
-        @click="downloadFile"
-        class="action-button flex items-center justify-center px-4 py-2 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 bg-blue-600 hover:bg-blue-700 text-white focus:ring-blue-500 focus:ring-offset-white dark:focus:ring-offset-gray-800"
+      v-if="fileUrls.downloadUrl"
+      @click="downloadFile"
+      class="action-button flex items-center justify-center px-4 py-2 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 bg-blue-600 hover:bg-blue-700 text-white focus:ring-blue-500 focus:ring-offset-white dark:focus:ring-offset-gray-800"
     >
       <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
       </svg>
-      <span>下载文件</span>
+      <span>{{ t("fileView.actions.download") }}</span>
     </button>
 
     <!-- 编辑按钮 (管理员可见所有文件，API密钥用户只能看到自己的文件) -->
     <button
-        v-if="(isAdmin || (hasApiKey && hasFilePermission && isCreator)) && fileInfo.id"
-        @click="$emit('edit')"
-        class="action-button flex items-center justify-center px-4 py-2 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-800 dark:text-white focus:ring-gray-400 dark:focus:ring-gray-500 focus:ring-offset-white dark:focus:ring-offset-gray-800"
+      v-if="(isAdmin || (hasApiKey && hasFilePermission && isCreator)) && fileInfo.id"
+      @click="$emit('edit')"
+      class="action-button flex items-center justify-center px-4 py-2 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-800 dark:text-white focus:ring-gray-400 dark:focus:ring-gray-500 focus:ring-offset-white dark:focus:ring-offset-gray-800"
     >
       <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
         />
       </svg>
-      <span>编辑信息</span>
+      <span>{{ t("fileView.actions.edit") }}</span>
     </button>
 
     <!-- 分享按钮 -->
     <button
-        @click="shareFile"
-        class="action-button flex items-center justify-center px-4 py-2 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 bg-green-600 hover:bg-green-700 text-white focus:ring-green-500 focus:ring-offset-white dark:focus:ring-offset-gray-800"
+      @click="shareFile"
+      class="action-button flex items-center justify-center px-4 py-2 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 bg-green-600 hover:bg-green-700 text-white focus:ring-green-500 focus:ring-offset-white dark:focus:ring-offset-gray-800"
     >
       <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"
         />
       </svg>
-      <span>分享链接</span>
+      <span>{{ t("fileView.actions.share") }}</span>
     </button>
 
     <!-- 删除按钮 (管理员可见所有文件，API密钥用户只能看到自己的文件) -->
     <button
-        v-if="(isAdmin || (hasApiKey && hasFilePermission && isCreator)) && fileInfo.id"
-        @click="confirmDelete"
-        class="action-button flex items-center justify-center px-4 py-2 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 bg-red-600 hover:bg-red-700 text-white focus:ring-red-500 focus:ring-offset-white dark:focus:ring-offset-gray-800"
+      v-if="(isAdmin || (hasApiKey && hasFilePermission && isCreator)) && fileInfo.id"
+      @click="confirmDelete"
+      class="action-button flex items-center justify-center px-4 py-2 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 bg-red-600 hover:bg-red-700 text-white focus:ring-red-500 focus:ring-offset-white dark:focus:ring-offset-gray-800"
     >
       <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
         />
       </svg>
-      <span>删除文件</span>
+      <span>{{ t("fileView.actions.delete") }}</span>
     </button>
 
     <!-- 删除确认模态框 -->
     <div v-if="showDeleteConfirm" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50">
       <div class="rounded-lg p-6 max-w-sm w-full shadow-xl bg-white dark:bg-gray-800">
-        <h3 class="text-lg font-medium mb-4 text-gray-900 dark:text-white">确认删除文件</h3>
+        <h3 class="text-lg font-medium mb-4 text-gray-900 dark:text-white">{{ t("fileView.actions.delete") }}</h3>
         <p class="mb-6 text-gray-600 dark:text-gray-300">
-          您确定要删除文件 <strong>{{ fileInfo.filename }}</strong> 吗？此操作无法撤销。
+          {{ t("fileView.actions.deleteConfirm") }}
         </p>
         <div class="flex justify-end space-x-3">
           <button
-              @click="showDeleteConfirm = false"
-              class="px-4 py-2 rounded-md text-sm font-medium transition-colors bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-white"
+            @click="showDeleteConfirm = false"
+            class="px-4 py-2 rounded-md text-sm font-medium transition-colors bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-white"
           >
-            取消
+            {{ t("common.cancel") }}
           </button>
           <button @click="deleteFile" class="px-4 py-2 rounded-md text-sm font-medium transition-colors bg-red-600 hover:bg-red-700 text-white" :disabled="deleting">
-            {{ deleting ? "删除中..." : "确认删除" }}
+            {{ deleting ? t("fileView.actions.deleting") : t("common.confirm") }}
           </button>
         </div>
       </div>
@@ -103,35 +103,39 @@
 
     <!-- 复制成功提示 -->
     <div
-        v-if="showCopyToast"
-        class="fixed top-4 right-4 px-4 py-3 rounded-lg shadow-lg z-50 flex items-center transition-opacity duration-200 bg-white dark:bg-gray-800 text-green-600 dark:text-green-400 border border-gray-200 dark:border-gray-700"
+      v-if="showCopyToast"
+      class="fixed top-4 right-4 px-4 py-3 rounded-lg shadow-lg z-50 flex items-center transition-opacity duration-200 bg-white dark:bg-gray-800 text-green-600 dark:text-green-400 border border-gray-200 dark:border-gray-700"
     >
       <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
       </svg>
-      <span>链接已复制到剪贴板!</span>
+      <span>{{ t("fileView.fileInfo.linkCopied") }}</span>
     </div>
 
     <!-- 错误提示组件 -->
     <ErrorToast
-        :visible="showErrorToast"
-        :title="errorTitle"
-        :message="errorMessage"
-        :action-text="errorActionText"
-        :action-handler="errorActionHandler"
-        @close="closeErrorToast"
+      :visible="showErrorToast"
+      :title="errorTitle"
+      :message="errorMessage"
+      :action-text="errorActionText"
+      :action-handler="errorActionHandler"
+      @close="closeErrorToast"
     />
   </div>
 </template>
 
 <script setup>
 import { ref, defineProps, defineEmits, computed, onMounted } from "vue";
-import { getAuthStatus, isOfficeFileType } from "./FileViewUtils";
+import { useI18n } from "vue-i18n";
+import { isOffice as isOfficeFileType } from "../../utils/mimeUtils.js";
 import { api } from "../../api";
 import { ApiStatus } from "../../api/ApiStatus";
 import { getFullApiUrl } from "../../api/config";
 import { copyToClipboard } from "@/utils/clipboard";
 import ErrorToast from "../common/ErrorToast.vue";
+import { useAuthStore } from "../../stores/authStore.js";
+
+const { t } = useI18n();
 
 const props = defineProps({
   fileInfo: {
@@ -153,8 +157,13 @@ const props = defineProps({
 
 const emit = defineEmits(["edit", "delete", "refresh-file-info"]);
 
-// 获取用户权限
-const { isAdmin, hasApiKey, hasFilePermission } = getAuthStatus();
+// 使用认证Store
+const authStore = useAuthStore();
+
+// 从Store获取权限状态的计算属性
+const isAdmin = computed(() => authStore.isAdmin);
+const hasApiKey = computed(() => authStore.authType === "apikey" && !!authStore.apiKey);
+const hasFilePermission = computed(() => authStore.hasFilePermission);
 
 // 删除确认状态
 const showDeleteConfirm = ref(false);
@@ -188,89 +197,12 @@ const closeErrorToast = () => {
   errorActionHandler.value = null;
 };
 
-// 计算属性：判断当前API密钥用户是否为文件创建者
+// 计算属性：判断当前用户是否为文件创建者
 const isCreator = computed(() => {
-  // 如果是管理员，可以编辑任何文件
-  if (isAdmin) {
-    return true;
-  }
-
-  // 如果文件没有创建者信息，则无法判断
-  if (!props.fileInfo || !props.fileInfo.created_by) {
-    return false;
-  }
-
-  try {
-    // 方法1: 从localStorage获取API密钥信息
-    const apiKeyInfo = localStorage.getItem("api_key_info");
-    if (apiKeyInfo) {
-      // 解析API密钥信息
-      const keyInfo = JSON.parse(apiKeyInfo);
-
-      // 处理created_by字段，后端返回的格式是"apikey:密钥ID"
-      const createdBy = props.fileInfo.created_by;
-
-      // 如果created_by以"apikey:"开头，提取实际的ID部分
-      if (typeof createdBy === "string" && createdBy.startsWith("apikey:")) {
-        const actualKeyId = createdBy.substring(7); // 移除"apikey:"前缀
-        return keyInfo.id === actualKeyId;
-      }
-
-      // 否则直接比较完整的ID
-      return keyInfo.id === createdBy;
-    }
-
-    // 方法2: 从URL参数获取API密钥
-    const urlParams = new URLSearchParams(window.location.search);
-    const urlApiKey = urlParams.get("apiKey");
-    if (urlApiKey) {
-      // 提取created_by字段中的API密钥部分
-      const createdBy = props.fileInfo.created_by;
-      if (typeof createdBy === "string" && createdBy.startsWith("apikey:")) {
-        // 这里我们只能做简单比较，因为URL中的是完整密钥而不是ID
-        const actualApiKeyId = createdBy.substring(7);
-        return urlApiKey === actualApiKeyId;
-      }
-    }
-
-    // 方法3: 从localStorage获取原始API密钥
-    const storedApiKey = localStorage.getItem("api_key");
-    if (storedApiKey) {
-      // 检查用户是否有文件权限
-      if (!hasFilePermission) {
-        return false;
-      }
-
-      // 如果是API密钥用户且有文件权限，检查文件是否由API密钥用户创建
-      const createdBy = props.fileInfo.created_by || "";
-      if (createdBy.startsWith("apikey:")) {
-        // 由于无法确定确切ID，暂时允许任何有文件权限的API密钥用户编辑
-        return true;
-      }
-    }
-
-    return false;
-  } catch (err) {
-    console.error("解析API密钥信息失败:", err);
-    return false;
-  }
+  return authStore.isFileCreator(props.fileInfo);
 });
 
-// 在组件挂载时验证API密钥，确保拥有正确的密钥信息
-onMounted(async () => {
-  // 如果是API密钥用户但localStorage中没有api_key_info
-  if (hasApiKey && !localStorage.getItem("api_key_info")) {
-    try {
-      // 导入辅助工具
-      const { getApiKeyInfo } = await import("../../utils/auth-helper.js");
-
-      // 尝试获取API密钥信息
-      await getApiKeyInfo();
-    } catch (err) {
-      console.error("验证API密钥出错:", err);
-    }
-  }
-});
+// 认证信息已由认证Store管理，不需要额外的验证逻辑
 
 // 辅助函数：获取文件密码（按优先级顺序）
 const getFilePassword = () => {
@@ -344,13 +276,18 @@ const previewFile = async () => {
         const response = await fetch(apiUrl);
         if (!response.ok) {
           const errorData = await response.json();
-          showError("Office预览失败", `获取Office预览URL失败: ${errorData.error || response.statusText}`, "重试", () => emit("refresh-file-info"));
+          showError(
+            t("fileView.actions.previewFailed"),
+            `${t("fileView.actions.getPreviewUrlFailed")}: ${errorData.error || response.statusText}`,
+            t("fileView.actions.retry"),
+            () => emit("refresh-file-info")
+          );
           return;
         }
 
         const data = await response.json();
         if (!data.url) {
-          showError("Office预览失败", "获取Office预览URL失败: 返回数据中没有URL", "重试", () => emit("refresh-file-info"));
+          showError(t("fileView.actions.previewFailed"), t("fileView.actions.noUrlInResponse"), t("fileView.actions.retry"), () => emit("refresh-file-info"));
           return;
         }
 
@@ -418,7 +355,7 @@ const previewFile = async () => {
     window.open(previewUrl, "_blank");
   } catch (err) {
     console.error("预览文件失败:", err);
-    showError("预览失败", err.message || "预览文件时发生错误", "重试", () => emit("refresh-file-info"));
+    showError(t("fileView.actions.previewFailed"), err.message || t("fileView.errors.unknown"), t("fileView.actions.retry"), () => emit("refresh-file-info"));
   }
 };
 
@@ -433,7 +370,7 @@ const downloadFile = () => {
     console.log("开始下载文件:", props.fileInfo.filename);
 
     // 提取文件名，用于下载时的文件命名
-    const fileName = props.fileInfo.filename || "下载文件";
+    const fileName = props.fileInfo.filename || t("fileView.actions.downloadFile");
 
     // 检查是否是代理URL并添加密码参数
     let downloadUrl = props.fileUrls.downloadUrl;
@@ -490,17 +427,17 @@ const downloadFile = () => {
 
     // 如果是授权问题，提示刷新页面
     if (
-        err.status === ApiStatus.FORBIDDEN ||
-        err.response?.status === ApiStatus.FORBIDDEN ||
-        err.status === ApiStatus.UNAUTHORIZED ||
-        err.response?.status === ApiStatus.UNAUTHORIZED ||
-        err.code === ApiStatus.FORBIDDEN ||
-        err.code === ApiStatus.UNAUTHORIZED ||
-        (err.message && (err.message.includes(ApiStatus.FORBIDDEN.toString()) || err.message.includes(ApiStatus.UNAUTHORIZED.toString())))
+      err.status === ApiStatus.FORBIDDEN ||
+      err.response?.status === ApiStatus.FORBIDDEN ||
+      err.status === ApiStatus.UNAUTHORIZED ||
+      err.response?.status === ApiStatus.UNAUTHORIZED ||
+      err.code === ApiStatus.FORBIDDEN ||
+      err.code === ApiStatus.UNAUTHORIZED ||
+      (err.message && (err.message.includes(ApiStatus.FORBIDDEN.toString()) || err.message.includes(ApiStatus.UNAUTHORIZED.toString())))
     ) {
-      showError("下载失败", "下载链接可能已过期，请尝试刷新获取新的下载链接。", "刷新", () => emit("refresh-file-info"));
+      showError(t("fileView.actions.downloadFailed"), t("fileView.actions.downloadExpired"), t("fileView.actions.refresh"), () => emit("refresh-file-info"));
     } else {
-      showError("下载失败", err.message || "下载文件时发生错误，请稍后重试");
+      showError(t("fileView.actions.downloadFailed"), err.message || t("fileView.errors.unknown"));
     }
   }
 };
@@ -517,7 +454,7 @@ const shareFile = async () => {
     try {
       await navigator.share({
         title: props.fileInfo.filename,
-        text: props.fileInfo.remark || `分享文件：${props.fileInfo.filename}`,
+        text: props.fileInfo.remark || `${t("fileView.actions.shareFileText")}：${props.fileInfo.filename}`,
         url: shareUrl,
       });
       console.log("文件分享成功");
@@ -547,12 +484,12 @@ const fallbackShare = async (url) => {
         showCopyToast.value = false;
       }, 3000);
     } else {
-      throw new Error("复制失败");
+      throw new Error(t("fileView.fileInfo.copyFailed"));
     }
   } catch (err) {
     console.error("复制失败:", err);
     // 如果复制失败，提示用户手动复制
-    showError("复制失败", `无法自动复制，请手动复制链接：${url}`);
+    showError(t("fileView.fileInfo.copyFailed"), `${t("fileView.actions.manualCopy")}：${url}`);
   }
 };
 
@@ -575,12 +512,12 @@ const deleteFile = async () => {
     let response;
 
     // 根据用户类型选择合适的 API 函数
-    if (isAdmin) {
+    if (isAdmin.value) {
       response = await api.file.deleteFile(props.fileInfo.id);
-    } else if (hasApiKey && hasFilePermission && isCreator.value) {
+    } else if (hasApiKey.value && hasFilePermission.value && isCreator.value) {
       response = await api.file.deleteUserFile(props.fileInfo.id);
     } else {
-      throw new Error("没有足够的权限删除此文件");
+      throw new Error(t("fileView.actions.noPermission"));
     }
 
     if (response.success) {
@@ -591,11 +528,11 @@ const deleteFile = async () => {
     } else {
       // 处理删除失败的情况
       console.error("删除文件失败:", response.message);
-      showError("删除失败", `删除文件失败: ${response.message}`);
+      showError(t("fileView.actions.deleteFailed"), `${t("fileView.actions.deleteFailed")}: ${response.message}`);
     }
   } catch (err) {
     console.error("删除文件错误:", err);
-    showError("删除失败", err.message || "删除文件时发生错误，请稍后重试");
+    showError(t("fileView.actions.deleteFailed"), err.message || t("fileView.errors.unknown"));
   } finally {
     deleting.value = false;
   }

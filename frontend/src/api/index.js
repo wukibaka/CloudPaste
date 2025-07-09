@@ -81,13 +81,13 @@ export const api = {
     getSystemSettings: systemService.getSystemSettings,
     updateSystemSettings: systemService.updateSystemSettings,
     getDashboardStats: systemService.getDashboardStats,
+    getCacheStats: systemService.getCacheStats,
     clearCache: systemService.clearCacheAdmin,
 
     // 文件系统管理
     getDirectoryList: fsService.getAdminDirectoryList,
     getFileInfo: fsService.getAdminFileInfo,
     getFileDownloadUrl: fsService.getAdminFileDownloadUrl,
-    getFilePreviewUrl: fsService.getAdminFilePreviewUrl,
     getFileLink: fsService.getAdminFileLink,
     createDirectory: fsService.createAdminDirectory,
     uploadFile: fsService.uploadAdminFile,
@@ -172,7 +172,6 @@ export const api = {
       getDirectoryList: fsService.getUserDirectoryList,
       getFileInfo: fsService.getUserFileInfo,
       getFileDownloadUrl: fsService.getUserFileDownloadUrl,
-      getFilePreviewUrl: fsService.getUserFilePreviewUrl,
       getFileLink: fsService.getUserFileLink,
       createDirectory: fsService.createUserDirectory,
       uploadFile: fsService.uploadUserFile,

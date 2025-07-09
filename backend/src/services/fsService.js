@@ -707,6 +707,33 @@ export async function getFileInfo(db, path, userIdOrInfo, userType, encryptionSe
               storage_type: mount.storage_type,
             };
 
+            // 如果是文件，添加preview_url和download_url字段
+            if (!isDirectory) {
+              try {
+                const { generatePresignedUrl } = await import("../utils/s3Utils.js");
+
+                // 构建缓存选项 - 安全提取用户ID
+                const cacheOptions = {
+                  userType,
+                  userId: userType === "admin" ? userIdOrInfo : userIdOrInfo?.id || userIdOrInfo,
+                  enableCache: true,
+                };
+
+                // 生成预览URL（不强制下载）
+                const previewUrl = await generatePresignedUrl(s3Config, s3SubPath, encryptionSecret, null, false, null, cacheOptions);
+                result.preview_url = previewUrl;
+
+                // 生成下载URL（强制下载）
+                const downloadUrl = await generatePresignedUrl(s3Config, s3SubPath, encryptionSecret, null, true, null, cacheOptions);
+                result.download_url = downloadUrl;
+
+                console.log(`为文件[${result.name}]生成预签名URL: preview=${!!previewUrl}, download=${!!downloadUrl}`);
+              } catch (urlError) {
+                console.warn(`生成预签名URL失败: ${urlError.message}`);
+                // 不阻断主流程，只是没有预签名URL
+              }
+            }
+
             // 保留关键调试日志：确认S3返回的ContentType
             console.log(`getFileInfo - 文件[${result.name}], S3 ContentType[${headResponse.ContentType}]`);
 
@@ -764,6 +791,33 @@ export async function getFileInfo(db, path, userIdOrInfo, userType, encryptionSe
                 mount_id: mount.id,
                 storage_type: mount.storage_type,
               };
+
+              // 如果是文件，添加preview_url和download_url字段
+              if (!isDirectory) {
+                try {
+                  const { generatePresignedUrl } = await import("../utils/s3Utils.js");
+
+                  // 构建缓存选项 - 安全提取用户ID
+                  const cacheOptions = {
+                    userType,
+                    userId: userType === "admin" ? userIdOrInfo : userIdOrInfo?.id || userIdOrInfo,
+                    enableCache: true,
+                  };
+
+                  // 生成预览URL（不强制下载）
+                  const previewUrl = await generatePresignedUrl(s3Config, s3SubPath, encryptionSecret, null, false, null, cacheOptions);
+                  result.preview_url = previewUrl;
+
+                  // 生成下载URL（强制下载）
+                  const downloadUrl = await generatePresignedUrl(s3Config, s3SubPath, encryptionSecret, null, true, null, cacheOptions);
+                  result.download_url = downloadUrl;
+
+                  console.log(`为文件[${result.name}]生成预签名URL: preview=${!!previewUrl}, download=${!!downloadUrl}`);
+                } catch (urlError) {
+                  console.warn(`生成预签名URL失败: ${urlError.message}`);
+                  // 不阻断主流程，只是没有预签名URL
+                }
+              }
 
               // 保留关键调试日志：确认S3返回的ContentType
               console.log(`getFileInfo(GET) - 文件[${result.name}], S3 ContentType[${getResponse.ContentType}]`);
@@ -834,68 +888,16 @@ export async function getFileInfo(db, path, userIdOrInfo, userType, encryptionSe
 }
 
 /**
- * 预览文件
- * @param {D1Database} db - D1数据库实例
- * @param {string} path - 文件路径
- * @param {string|Object} userIdOrInfo - 用户ID（管理员）或API密钥信息对象（API密钥用户）
- * @param {string} userType - 用户类型 (admin 或 apiKey)
- * @param {string} encryptionSecret - 加密密钥
- * @returns {Promise<Response>} 文件内容响应，用于预览
- */
-export async function previewFile(db, path, userIdOrInfo, userType, encryptionSecret) {
-  return handleFsError(
-      async () => {
-        // 查找挂载点
-        let mountResult;
-        if (userType === "admin") {
-          mountResult = await findMountPointByPath(db, path, userIdOrInfo, userType);
-        } else if (userType === "apiKey") {
-          mountResult = await findMountPointByPathWithApiKey(db, path, userIdOrInfo);
-        } else {
-          throw new HTTPException(ApiStatus.UNAUTHORIZED, { message: "未授权访问" });
-        }
-
-        // 处理错误情况
-        if (mountResult.error) {
-          throw new HTTPException(mountResult.error.status, { message: mountResult.error.message });
-        }
-
-        const { mount, subPath } = mountResult;
-
-        // 获取S3配置
-        const s3Config = await db.prepare("SELECT * FROM s3_configs WHERE id = ?").bind(mount.storage_config_id).first();
-        if (!s3Config) {
-          throw new HTTPException(ApiStatus.NOT_FOUND, { message: "存储配置不存在" });
-        }
-
-        // 规范化S3子路径 (不添加斜杠，因为是文件)
-        const s3SubPath = normalizeS3SubPath(subPath, s3Config, false);
-
-        // 更新最后使用时间
-        await updateMountLastUsed(db, mount.id);
-
-        // 提取文件名
-        const fileName = path.split("/").filter(Boolean).pop() || "file";
-
-        // 使用getFileFromS3函数直接获取内容并返回
-        // 设置isPreview为true表示预览模式
-        return await getFileFromS3(s3Config, s3SubPath, fileName, true, encryptionSecret);
-      },
-      "预览文件",
-      "预览文件失败"
-  );
-}
-
-/**
  * 下载文件
  * @param {D1Database} db - D1数据库实例
  * @param {string} path - 文件路径
  * @param {string|Object} userIdOrInfo - 用户ID（管理员）或API密钥信息对象（API密钥用户）
  * @param {string} userType - 用户类型 (admin 或 apiKey)
  * @param {string} encryptionSecret - 加密密钥
+ * @param {Request} [request] - 请求对象，用于获取Range头
  * @returns {Promise<Response>} 文件内容响应
  */
-export async function downloadFile(db, path, userIdOrInfo, userType, encryptionSecret) {
+export async function downloadFile(db, path, userIdOrInfo, userType, encryptionSecret, request = null) {
   return handleFsError(
       async () => {
         // 查找挂载点
@@ -924,8 +926,8 @@ export async function downloadFile(db, path, userIdOrInfo, userType, encryptionS
         const fileName = path.split("/").filter(Boolean).pop() || "file";
 
         // 使用getFileFromS3函数直接获取内容并返回
-        // 设置isPreview为true表示预览模式
-        return await getFileFromS3(s3Config, s3SubPath, fileName, false, encryptionSecret);
+        // 设置isPreview为false表示下载模式，传递请求对象以支持Range请求
+        return await getFileFromS3(s3Config, s3SubPath, fileName, false, encryptionSecret, request);
       },
       "下载文件",
       "下载文件失败"
@@ -1647,9 +1649,10 @@ export async function batchRemoveItems(db, paths, userIdOrInfo, userType, encryp
  * @param {string} fileName - 文件名
  * @param {boolean} isPreview - 是否为预览模式
  * @param {string} encryptionSecret - 加密密钥
+ * @param {Request} [request] - 请求对象，用于获取Range头
  * @returns {Promise<Response>} 文件内容响应
  */
-async function getFileFromS3(s3Config, s3SubPath, fileName, isPreview, encryptionSecret) {
+async function getFileFromS3(s3Config, s3SubPath, fileName, isPreview, encryptionSecret, request = null) {
   // 设置内联或附件模式
   const contentDisposition = `${isPreview ? "inline" : "attachment"}; filename="${encodeURIComponent(fileName)}"`;
 
@@ -1658,11 +1661,20 @@ async function getFileFromS3(s3Config, s3SubPath, fileName, isPreview, encryptio
     const { createS3Client } = await import("../utils/s3Utils.js");
     const s3Client = await createS3Client(s3Config, encryptionSecret);
 
+    //处理Range请求
+    const rangeHeader = request?.headers?.get?.("Range");
+
     // 获取对象内容
     const getParams = {
       Bucket: s3Config.bucket_name,
       Key: s3SubPath,
     };
+
+    // 如果有Range请求，添加Range参数
+    if (rangeHeader) {
+      getParams.Range = rangeHeader;
+      console.log(`🎬Range请求: ${rangeHeader}`);
+    }
 
     const { GetObjectCommand } = await import("@aws-sdk/client-s3");
     const command = new GetObjectCommand(getParams);
@@ -1673,12 +1685,12 @@ async function getFileFromS3(s3Config, s3SubPath, fileName, isPreview, encryptio
       "Content-Type": response.ContentType || "application/octet-stream",
       "Content-Disposition": contentDisposition,
       "Cache-Control": "private, max-age=0",
-      // 添加必要的CORS头部
       "Access-Control-Allow-Origin": "*", // 在路由层会被替换为实际的Origin
       "Access-Control-Allow-Methods": "GET, OPTIONS",
       "Access-Control-Allow-Headers": "Range, Content-Type, Content-Length, Authorization",
       "Access-Control-Allow-Credentials": "true",
-      "Access-Control-Expose-Headers": "Content-Length, Content-Type, Content-Disposition, ETag",
+      "Access-Control-Expose-Headers": "Content-Length, Content-Type, Content-Disposition, Content-Range, Accept-Ranges, ETag",
+      "Accept-Ranges": "bytes",
     };
 
     // 如果有Content-Length，添加到头部
@@ -1696,9 +1708,17 @@ async function getFileFromS3(s3Config, s3SubPath, fileName, isPreview, encryptio
       headers["ETag"] = response.ETag;
     }
 
+    // 🎯 处理Range响应 - 如果有Content-Range头，说明是部分内容响应
+    let responseStatus = 200;
+    if (response.ContentRange) {
+      headers["Content-Range"] = response.ContentRange;
+      responseStatus = 206; // Partial Content
+      console.log(`🎬 mount-explorer Range响应: ${response.ContentRange}`);
+    }
+
     // 返回包含文件内容的响应
     return new Response(response.Body, {
-      status: 200,
+      status: responseStatus,
       headers: headers,
     });
   } catch (error) {
@@ -1764,9 +1784,17 @@ export async function getFilePresignedUrl(db, path, userIdOrInfo, userType, encr
         // 获取文件名
         const fileName = path.split("/").filter(Boolean).pop() || "file";
 
-        // 生成预签名URL
+        // 生成预签名URL，使用传入的expiresIn参数（保持现有API兼容性）
         const { generatePresignedUrl } = await import("../utils/s3Utils.js");
-        const presignedUrl = await generatePresignedUrl(s3Config, s3SubPath, encryptionSecret, expiresIn, forceDownload);
+
+        // 构建缓存选项 - 安全提取用户ID
+        const cacheOptions = {
+          userType,
+          userId: userType === "admin" ? userIdOrInfo : userIdOrInfo?.id || userIdOrInfo,
+          enableCache: true,
+        };
+
+        const presignedUrl = await generatePresignedUrl(s3Config, s3SubPath, encryptionSecret, expiresIn, forceDownload, null, cacheOptions);
 
         // 构建响应对象
         return {
@@ -1875,11 +1903,6 @@ export async function updateFile(db, path, content, userIdOrInfo, userType, encr
               mimetype: originalMetadata?.ContentType || "text/plain",
             });
 
-            // 检查是否为可执行文件或危险文件类型
-            if (mimeGroup === MIME_GROUPS.EXECUTABLE) {
-              throw new HTTPException(ApiStatus.FORBIDDEN, { message: "不允许更新可执行文件类型" });
-            }
-
             contentType = mimeType;
             console.log(`文件 ${fileName} 的MIME类型确定为: ${contentType}, 分组: ${mimeGroup}`);
           } else if (content instanceof ArrayBuffer || content instanceof Uint8Array) {
@@ -1890,11 +1913,6 @@ export async function updateFile(db, path, content, userIdOrInfo, userType, encr
               filename: fileName,
               mimetype: originalMetadata?.ContentType || "application/octet-stream",
             });
-
-            // 检查是否为可执行文件或危险文件类型
-            if (mimeGroup === MIME_GROUPS.EXECUTABLE) {
-              throw new HTTPException(ApiStatus.FORBIDDEN, { message: "不允许更新可执行文件类型" });
-            }
 
             contentType = mimeType;
             console.log(`二进制文件 ${fileName} 的MIME类型确定为: ${contentType}, 分组: ${mimeGroup}`);

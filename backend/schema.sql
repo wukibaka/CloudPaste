@@ -32,6 +32,8 @@ CREATE INDEX idx_pastes_slug ON pastes(slug);
 CREATE INDEX idx_pastes_created_at ON pastes(created_at DESC);
 CREATE INDEX idx_pastes_created_by ON pastes(created_by);    -- 添加创建者索引
 
+
+
 -- 创建admins表 - 存储管理员信息
 CREATE TABLE admins (
   id TEXT PRIMARY KEY,
@@ -58,6 +60,7 @@ CREATE TABLE api_keys (
   text_permission BOOLEAN DEFAULT 0,
   file_permission BOOLEAN DEFAULT 0,
   mount_permission BOOLEAN DEFAULT 0,
+  basic_path TEXT DEFAULT '/',
   last_used DATETIME,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   expires_at DATETIME NOT NULL -- 默认一天后过期
@@ -82,6 +85,8 @@ CREATE TABLE s3_configs (
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   last_used DATETIME,                  -- 最后使用时间
   admin_id TEXT,                       -- 关联的管理员ID
+  custom_host TEXT,                    -- 自定义域名/CDN域名
+  signature_expires_in INTEGER DEFAULT 3600, -- 签名有效期（秒）
   FOREIGN KEY (admin_id) REFERENCES admins(id) ON DELETE CASCADE
 );
 
@@ -171,7 +176,7 @@ CREATE INDEX idx_storage_mounts_sort_order ON storage_mounts(sort_order);
 -- 注意: 这是SHA-256哈希后的密码，实际部署时应更改
 INSERT INTO admins (id, username, password)
 VALUES (
-  '00000000-0000-0000-0000-000000000000', 
+  '00000000-0000-0000-0000-000000000000',
   'admin',
   '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9'  -- SHA-256('admin123')
 );
@@ -188,17 +193,19 @@ VALUES (
 
 -- 插入示例S3配置（加密密钥仅作示例，实际应用中应当由系统加密存储）
 INSERT INTO s3_configs (
-  id, 
-  name, 
-  provider_type, 
-  endpoint_url, 
-  bucket_name, 
-  region, 
-  access_key_id, 
-  secret_access_key, 
+  id,
+  name,
+  provider_type,
+  endpoint_url,
+  bucket_name,
+  region,
+  access_key_id,
+  secret_access_key,
   path_style,
   default_folder,
-  admin_id
+  admin_id,
+  custom_host,
+  signature_expires_in
 ) VALUES (
   '22222222-2222-2222-2222-222222222222',
   'Cloudflare R2存储',
@@ -210,5 +217,7 @@ INSERT INTO s3_configs (
   'encrypted:secret-access-key-placeholder',
   0,
   'uploads/',
-  '00000000-0000-0000-0000-000000000000'
-); 
+  '00000000-0000-0000-0000-000000000000',
+  NULL,
+  3600
+);

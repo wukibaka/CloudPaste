@@ -305,11 +305,24 @@ async function handleFileDownload(slug, env, request, forceDownload = false) {
         });
       }
 
-      // 生成预签名URL，传递MIME类型以确保正确的Content-Type
-      const presignedUrl = await generatePresignedUrl(s3Config, result.file.storage_path, encryptionSecret, 3600, forceDownload, contentType);
+      // 生成预签名URL，使用S3配置的默认时效，传递MIME类型以确保正确的Content-Type
+      // 注意：文件分享页面没有用户上下文，禁用缓存避免权限泄露
+      const presignedUrl = await generatePresignedUrl(s3Config, result.file.storage_path, encryptionSecret, null, forceDownload, contentType, { enableCache: false });
+
+      //处理Range请求
+      const rangeHeader = request.headers.get("Range");
+      const fileRequestHeaders = {};
+
+      // 如果有Range请求，转发给S3
+      if (rangeHeader) {
+        fileRequestHeaders["Range"] = rangeHeader;
+        console.log(`🎬 代理Range请求: ${rangeHeader}`);
+      }
 
       // 代理请求到实际的文件URL
-      const fileRequest = new Request(presignedUrl);
+      const fileRequest = new Request(presignedUrl, {
+        headers: fileRequestHeaders,
+      });
       const response = await fetch(fileRequest);
 
       // 创建一个新的响应，包含正确的文件名和Content-Type
@@ -323,11 +336,14 @@ async function handleFileDownload(slug, env, request, forceDownload = false) {
         }
       }
 
-      // 设置CORS头，允许所有源访问
+      // 设置CORS头，允许所有源访问，支持Range请求
       headers.set("Access-Control-Allow-Origin", "*");
       headers.set("Access-Control-Allow-Methods", "GET, OPTIONS");
-      headers.set("Access-Control-Allow-Headers", "Content-Type, Content-Disposition");
-      headers.set("Access-Control-Expose-Headers", "Content-Type, Content-Disposition, Content-Length");
+      headers.set("Access-Control-Allow-Headers", "Content-Type, Content-Disposition, Range");
+      headers.set("Access-Control-Expose-Headers", "Content-Type, Content-Disposition, Content-Length, Content-Range, Accept-Ranges");
+
+      // 🎯 添加Accept-Ranges头，告诉客户端支持Range请求
+      headers.set("Accept-Ranges", "bytes");
 
       // 使用统一的内容类型和处置方式函数
       const { contentType: finalContentType, contentDisposition } = getContentTypeAndDisposition({
@@ -447,18 +463,17 @@ export function registerFileViewRoutes(app) {
       }
 
       try {
-        // 设置特殊的安全参数：较短的过期时间（60分钟）和正确的内容类型
-        const expiresIn = 60 * 60; // 60分钟，单位为秒
-
+        // Office预览使用S3配置的默认时效
         // 生成临时预签名URL，适用于Office预览
-        const presignedUrl = await generatePresignedUrl(s3Config, file.storage_path, encryptionSecret, expiresIn, false, file.mimetype);
+        // 注意：Office预览没有用户上下文，禁用缓存避免权限泄露
+        const presignedUrl = await generatePresignedUrl(s3Config, file.storage_path, encryptionSecret, null, false, file.mimetype, { enableCache: false });
 
         // 返回直接访问URL
         return c.json({
           url: presignedUrl,
           filename: file.filename,
           mimetype: file.mimetype,
-          expires_in: expiresIn,
+          expires_in: s3Config.signature_expires_in || 3600,
           is_temporary: true,
         });
       } catch (error) {

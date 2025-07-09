@@ -31,6 +31,38 @@ const statsData = ref({
   lastWeekFiles: [],
 });
 
+// 缓存统计数据
+const cacheStats = ref({
+  directory: {
+    cacheSize: 0,
+    hitRate: 0,
+  },
+  s3Url: {
+    cacheSize: 0,
+    hitRate: 0,
+  },
+  search: {
+    cacheSize: 0,
+    hitRate: 0,
+  },
+  error: null,
+});
+
+// 缓存卡片折叠状态
+const isCacheExpanded = ref(false);
+
+// 清理缓存状态
+const isClearingCache = ref(false);
+
+// 版本信息数据
+const versionInfo = ref({
+  version: "加载中...",
+  environment: "加载中...",
+  storage: "加载中...",
+  uptime: 0,
+  error: null,
+});
+
 // 当前选中的存储桶
 const selectedBucketId = ref(null);
 
@@ -63,7 +95,7 @@ const chartData = computed(() => {
     labels: dateLabels.value,
     datasets: [
       {
-        label: t("dashboard.totalPastes"),
+        label: t("admin.dashboard.totalPastes"),
         backgroundColor: props.darkMode ? "rgba(59, 130, 246, 0.7)" : "rgba(37, 99, 235, 0.7)",
         borderColor: props.darkMode ? "rgba(59, 130, 246, 1)" : "rgba(37, 99, 235, 1)",
         borderWidth: 1,
@@ -71,7 +103,7 @@ const chartData = computed(() => {
         borderRadius: 4,
       },
       {
-        label: t("dashboard.totalFiles"),
+        label: t("admin.dashboard.totalFiles"),
         backgroundColor: props.darkMode ? "rgba(16, 185, 129, 0.7)" : "rgba(5, 150, 105, 0.7)",
         borderColor: props.darkMode ? "rgba(16, 185, 129, 1)" : "rgba(5, 150, 105, 1)",
         borderWidth: 1,
@@ -128,13 +160,13 @@ const chartOptions = computed(() => {
           label: function (context) {
             const label = context.dataset.label || "";
             const value = context.parsed.y;
-            return `${label}: ${value} ${t("dashboard.items")}`;
+            return `${label}: ${value} ${t("admin.dashboard.items")}`;
           },
           footer: function (tooltipItems) {
             // 获取当前日期的总活动数
             const dataIndex = tooltipItems[0].dataIndex;
             const totalThisDay = statsData.value.lastWeekPastes[dataIndex] + statsData.value.lastWeekFiles[dataIndex];
-            return `${t("dashboard.activityOverview")}: ${totalThisDay} ${t("dashboard.items")}`;
+            return `${t("admin.dashboard.activityOverview")}: ${totalThisDay} ${t("admin.dashboard.items")}`;
           },
         },
       },
@@ -155,7 +187,7 @@ const currentBucketData = computed(() => {
   if (!selectedBucketId.value) {
     // 返回总体存储使用情况
     return {
-      name: t("dashboard.allBuckets"),
+      name: t("admin.dashboard.allBuckets"),
       usedStorage: statsData.value.totalStorageUsed,
       totalStorage: statsData.value.s3Buckets.reduce((total, bucket) => total + bucket.totalStorage, 0),
       usagePercent: calculateTotalUsagePercent(),
@@ -166,7 +198,7 @@ const currentBucketData = computed(() => {
   const bucket = statsData.value.s3Buckets.find((b) => b.id === selectedBucketId.value);
   return (
       bucket || {
-        name: t("dashboard.allBuckets"),
+        name: t("admin.dashboard.allBuckets"),
         usedStorage: statsData.value.totalStorageUsed,
         totalStorage: statsData.value.s3Buckets.reduce((total, bucket) => total + bucket.totalStorage, 0),
         usagePercent: calculateTotalUsagePercent(),
@@ -222,14 +254,14 @@ const getOtherProvidersPercent = () => {
 
 // 格式化存储大小
 const formatBytes = (bytes, decimals = 2) => {
-  if (bytes === 0) return `0 ${t("dashboard.storageUnits.bytes")}`;
+  if (bytes === 0) return `0 ${t("admin.dashboard.storageUnits.bytes")}`;
 
   const k = 1024;
   const sizeKeys = ["bytes", "kb", "mb", "gb", "tb"];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
 
   const sizeKey = sizeKeys[i] || "bytes";
-  const sizeUnit = t(`dashboard.storageUnits.${sizeKey}`);
+  const sizeUnit = t(`admin.dashboard.storageUnits.${sizeKey}`);
 
   return parseFloat((bytes / Math.pow(k, i)).toFixed(decimals)) + " " + sizeUnit;
 };
@@ -266,24 +298,102 @@ const weeklyMaxValues = computed(() => {
   };
 });
 
+// 获取缓存统计数据
+const fetchCacheStats = async () => {
+  try {
+    const response = await api.system.getCacheStats();
+    if (response.success && response.data) {
+      cacheStats.value = {
+        directory: {
+          cacheSize: response.data.cache?.directory?.cacheSize || 0,
+          hitRate: response.data.cache?.directory?.hitRate || 0,
+        },
+        s3Url: {
+          cacheSize: response.data.cache?.s3Url?.cacheSize || 0,
+          hitRate: response.data.cache?.s3Url?.hitRate || 0,
+        },
+        search: {
+          cacheSize: response.data.cache?.search?.cacheSize || 0,
+          hitRate: response.data.cache?.search?.hitRate || 0,
+        },
+        error: null,
+      };
+    }
+  } catch (err) {
+    console.warn("获取缓存统计失败:", err);
+    cacheStats.value.error = "获取缓存数据失败";
+  }
+};
+
+// 获取版本信息
+const fetchVersionInfo = async () => {
+  try {
+    const response = await api.system.getVersionInfo();
+    if (response.success && response.data) {
+      versionInfo.value = {
+        version: response.data.version || "1.0.0",
+        environment: response.data.environment || "Docker",
+        storage: response.data.storage || "SQLite",
+        uptime: response.data.uptime || 0,
+        error: null,
+      };
+    }
+  } catch (err) {
+    console.warn("获取版本信息失败:", err);
+    versionInfo.value.error = "获取版本信息失败";
+  }
+};
+
+// 清理所有缓存
+const clearAllCache = async () => {
+  if (isClearingCache.value) return;
+
+  isClearingCache.value = true;
+  try {
+    const response = await api.admin.clearCache(); // 无参数 = 清理所有缓存
+    if (response.success) {
+      // 显示成功消息
+      console.log(`缓存清理成功：${response.data.clearedCount} 项`);
+
+      // 重新获取缓存统计
+      await fetchCacheStats();
+
+      // 可以添加toast通知
+      // toast.success(`缓存清理成功，共清理 ${response.data.clearedCount} 项`);
+    } else {
+      throw new Error(response.message || "清理缓存失败");
+    }
+  } catch (err) {
+    console.error("清理缓存失败:", err);
+    // toast.error("清理缓存失败：" + err.message);
+  } finally {
+    isClearingCache.value = false;
+  }
+};
+
 // 从后端获取统计数据
 const fetchDashboardStats = async () => {
   isLoading.value = true;
   error.value = null;
 
   try {
-    // 实际API调用
-    const response = await api.admin.getDashboardStats();
-    if (response.success && response.data) {
-      statsData.value = response.data;
+    // 并行获取仪表盘数据、缓存统计和版本信息
+    const [dashboardResponse] = await Promise.all([
+      api.admin.getDashboardStats(),
+      fetchCacheStats(), // 缓存统计失败不影响主要数据
+      fetchVersionInfo(), // 版本信息失败不影响主要数据
+    ]);
+
+    if (dashboardResponse.success && dashboardResponse.data) {
+      statsData.value = dashboardResponse.data;
       // 重置选中的存储桶
       selectedBucketId.value = null;
     } else {
-      throw new Error(response.error || t("dashboard.fetchError"));
+      throw new Error(dashboardResponse.error || t("admin.dashboard.fetchError"));
     }
   } catch (err) {
     console.error("获取控制面板数据失败:", err);
-    error.value = t("dashboard.fetchError");
+    error.value = t("admin.dashboard.fetchError");
   } finally {
     isLoading.value = false;
   }
@@ -321,7 +431,7 @@ onBeforeUnmount(() => {
     <!-- 标题和刷新按钮 -->
     <div class="flex justify-between items-center mb-4 md:mb-6">
       <h2 class="text-xl font-bold" :class="darkMode ? 'text-white' : 'text-gray-800'">
-        {{ t("dashboard.systemOverview") }}
+        {{ t("admin.dashboard.systemOverview") }}
       </h2>
       <button
           @click="fetchDashboardStats"
@@ -336,7 +446,7 @@ onBeforeUnmount(() => {
               d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
           />
         </svg>
-        {{ isLoading ? t("dashboard.refreshing") : t("dashboard.refresh") }}
+        {{ isLoading ? t("admin.dashboard.refreshing") : t("admin.dashboard.refresh") }}
       </button>
     </div>
 
@@ -352,7 +462,7 @@ onBeforeUnmount(() => {
         <div class="flex justify-between">
           <div>
             <p class="text-sm font-medium" :class="darkMode ? 'text-gray-300' : 'text-gray-500'">
-              {{ t("dashboard.totalPastes") }}
+              {{ t("admin.dashboard.totalPastes") }}
             </p>
             <p class="mt-1 text-2xl font-semibold" :class="darkMode ? 'text-white' : 'text-gray-800'">
               {{ statsData.totalPastes }}
@@ -376,7 +486,7 @@ onBeforeUnmount(() => {
         <div class="flex justify-between">
           <div>
             <p class="text-sm font-medium" :class="darkMode ? 'text-gray-300' : 'text-gray-500'">
-              {{ t("dashboard.totalFiles") }}
+              {{ t("admin.dashboard.totalFiles") }}
             </p>
             <p class="mt-1 text-2xl font-semibold" :class="darkMode ? 'text-white' : 'text-gray-800'">
               {{ statsData.totalFiles }}
@@ -395,7 +505,7 @@ onBeforeUnmount(() => {
         <div class="flex justify-between">
           <div>
             <p class="text-sm font-medium" :class="darkMode ? 'text-gray-300' : 'text-gray-500'">
-              {{ t("dashboard.totalApiKeys") }}
+              {{ t("admin.dashboard.totalApiKeys") }}
             </p>
             <p class="mt-1 text-2xl font-semibold" :class="darkMode ? 'text-white' : 'text-gray-800'">
               {{ statsData.totalApiKeys }}
@@ -419,7 +529,7 @@ onBeforeUnmount(() => {
         <div class="flex justify-between">
           <div>
             <p class="text-sm font-medium" :class="darkMode ? 'text-gray-300' : 'text-gray-500'">
-              {{ t("dashboard.totalS3Configs") }}
+              {{ t("admin.dashboard.totalS3Configs") }}
             </p>
             <p class="mt-1 text-2xl font-semibold" :class="darkMode ? 'text-white' : 'text-gray-800'">
               {{ statsData.totalS3Configs }}
@@ -440,7 +550,7 @@ onBeforeUnmount(() => {
       <div class="p-4 rounded-lg shadow transition-shadow hover:shadow-md" :class="darkMode ? 'bg-gray-700' : 'bg-white'">
         <div class="flex justify-between items-center mb-2">
           <h3 class="text-lg font-semibold" :class="darkMode ? 'text-white' : 'text-gray-800'">
-            {{ t("dashboard.storageUsage") }}
+            {{ t("admin.dashboard.storageUsage") }}
           </h3>
 
           <!-- 存储桶选择器 -->
@@ -472,7 +582,7 @@ onBeforeUnmount(() => {
                     darkMode ? 'text-gray-300 hover:bg-gray-700 hover:text-white' : 'text-gray-700 hover:bg-gray-100 hover:text-gray-900',
                   ]"
                 >
-                  {{ t("dashboard.allBuckets") }}
+                  {{ t("admin.dashboard.allBuckets") }}
                 </a>
 
                 <!-- 各个存储桶选项 -->
@@ -513,7 +623,7 @@ onBeforeUnmount(() => {
       <!-- 存储桶分布占比 -->
       <div class="p-4 rounded-lg shadow transition-shadow hover:shadow-md" :class="darkMode ? 'bg-gray-700' : 'bg-white'">
         <h3 class="text-lg font-semibold mb-2" :class="darkMode ? 'text-white' : 'text-gray-800'">
-          {{ t("dashboard.storageBucketDistribution") }}
+          {{ t("admin.dashboard.storageBucketDistribution") }}
         </h3>
 
         <!-- 简易图表，按服务商类型固定展示 -->
@@ -538,10 +648,131 @@ onBeforeUnmount(() => {
 
           <div class="flex items-center gap-2">
             <div class="w-3 h-3 rounded-full bg-purple-500"></div>
-            <span class="text-sm" :class="darkMode ? 'text-gray-300' : 'text-gray-600'">{{ t("dashboard.otherStorage") }}</span>
+            <span class="text-sm" :class="darkMode ? 'text-gray-300' : 'text-gray-600'">{{ t("admin.dashboard.otherStorage") }}</span>
           </div>
           <div class="text-right text-sm font-medium" :class="darkMode ? 'text-white' : 'text-gray-800'">{{ getOtherProvidersPercent() }}%</div>
         </div>
+      </div>
+    </div>
+
+    <!-- 缓存监控卡片 -->
+    <div class="mb-6">
+      <div class="p-4 rounded-lg shadow transition-shadow hover:shadow-md" :class="darkMode ? 'bg-gray-700' : 'bg-white'">
+        <div class="flex justify-between items-center">
+          <div class="flex-1 cursor-pointer" @click="isCacheExpanded = !isCacheExpanded">
+            <div class="flex items-center mb-2">
+              <div class="h-10 w-10 rounded-lg flex items-center justify-center mr-3" :class="darkMode ? 'bg-indigo-500/20 text-indigo-400' : 'bg-indigo-100 text-indigo-600'">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
+                  />
+                </svg>
+              </div>
+              <div>
+                <p class="text-base font-medium" :class="darkMode ? 'text-white' : 'text-gray-800'">
+                  {{ t("admin.dashboard.cacheMonitoring") }}
+                </p>
+                <p v-if="!isCacheExpanded && !cacheStats.error" class="text-sm" :class="darkMode ? 'text-gray-400' : 'text-gray-600'">
+                  {{ t("admin.dashboard.directoryCache") }}: {{ Math.round(cacheStats.directory.hitRate * 100) }}% | {{ t("admin.dashboard.s3UrlCache") }}:
+                  {{ Math.round(cacheStats.s3Url.hitRate * 100) }}% | {{ t("admin.dashboard.searchCache") }}: {{ Math.round(cacheStats.search.hitRate * 100) }}%
+                </p>
+                <p v-else-if="!isCacheExpanded && cacheStats.error" class="text-sm text-red-500">
+                  {{ t("admin.dashboard.cacheUnavailable") }}
+                </p>
+              </div>
+            </div>
+          </div>
+          <div class="flex items-center gap-2">
+            <!-- 清理缓存按钮 -->
+            <button
+                @click.stop="clearAllCache"
+                :disabled="isClearingCache"
+                class="p-2 rounded-lg transition-colors"
+                :class="[
+                darkMode
+                  ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30 disabled:bg-gray-600 disabled:text-gray-400'
+                  : 'bg-red-100 text-red-600 hover:bg-red-200 disabled:bg-gray-100 disabled:text-gray-400',
+              ]"
+                :title="t('admin.dashboard.clearAllCache')"
+            >
+              <svg v-if="!isClearingCache" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                />
+              </svg>
+              <svg v-else class="h-4 w-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path
+                    class="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                ></path>
+              </svg>
+            </button>
+            <!-- 展开/收起按钮 -->
+            <button @click.stop="isCacheExpanded = !isCacheExpanded" class="p-1">
+              <svg
+                  class="w-5 h-5 transition-transform duration-200"
+                  :class="[isCacheExpanded ? 'rotate-180' : '', darkMode ? 'text-gray-400' : 'text-gray-500']"
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+              >
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- 展开的详细信息 -->
+        <transition name="slide-down">
+          <div v-if="isCacheExpanded" class="mt-4 pt-4 border-t" :class="darkMode ? 'border-gray-600' : 'border-gray-200'">
+            <div v-if="!cacheStats.error" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              <!-- 目录缓存 -->
+              <div class="p-3 rounded-lg" :class="darkMode ? 'bg-gray-600' : 'bg-gray-50'">
+                <p class="text-sm font-medium mb-1" :class="darkMode ? 'text-gray-300' : 'text-gray-700'">
+                  {{ t("admin.dashboard.directoryCache") }}
+                </p>
+                <p class="text-lg font-semibold" :class="darkMode ? 'text-white' : 'text-gray-800'">
+                  {{ t("admin.dashboard.hitRate") }}: {{ Math.round(cacheStats.directory.hitRate * 100) }}%
+                </p>
+                <p class="text-sm" :class="darkMode ? 'text-gray-400' : 'text-gray-600'">{{ t("admin.dashboard.cacheItems") }}: {{ cacheStats.directory.cacheSize }}</p>
+              </div>
+
+              <!-- S3URL缓存 -->
+              <div class="p-3 rounded-lg" :class="darkMode ? 'bg-gray-600' : 'bg-gray-50'">
+                <p class="text-sm font-medium mb-1" :class="darkMode ? 'text-gray-300' : 'text-gray-700'">
+                  {{ t("admin.dashboard.s3UrlCache") }}
+                </p>
+                <p class="text-lg font-semibold" :class="darkMode ? 'text-white' : 'text-gray-800'">
+                  {{ t("admin.dashboard.hitRate") }}: {{ Math.round(cacheStats.s3Url.hitRate * 100) }}%
+                </p>
+                <p class="text-sm" :class="darkMode ? 'text-gray-400' : 'text-gray-600'">{{ t("admin.dashboard.cacheItems") }}: {{ cacheStats.s3Url.cacheSize }}</p>
+              </div>
+
+              <!-- 搜索缓存 -->
+              <div class="p-3 rounded-lg" :class="darkMode ? 'bg-gray-600' : 'bg-gray-50'">
+                <p class="text-sm font-medium mb-1" :class="darkMode ? 'text-gray-300' : 'text-gray-700'">
+                  {{ t("admin.dashboard.searchCache") }}
+                </p>
+                <p class="text-lg font-semibold" :class="darkMode ? 'text-white' : 'text-gray-800'">
+                  {{ t("admin.dashboard.hitRate") }}: {{ Math.round(cacheStats.search.hitRate * 100) }}%
+                </p>
+                <p class="text-sm" :class="darkMode ? 'text-gray-400' : 'text-gray-600'">{{ t("admin.dashboard.cacheItems") }}: {{ cacheStats.search.cacheSize }}</p>
+              </div>
+            </div>
+            <div v-else class="text-center py-4">
+              <p class="text-red-500">{{ cacheStats.error }}</p>
+            </div>
+          </div>
+        </transition>
       </div>
     </div>
 
@@ -550,7 +781,7 @@ onBeforeUnmount(() => {
       <div class="p-3 rounded-lg shadow transition-shadow hover:shadow-md" :class="darkMode ? 'bg-gray-700' : 'bg-white'">
         <div class="flex items-center justify-between mb-3">
           <h3 class="text-base font-semibold" :class="darkMode ? 'text-white' : 'text-gray-800'">
-            {{ t("dashboard.weeklyActivity") }}
+            {{ t("admin.dashboard.weeklyActivity") }}
           </h3>
 
           <div class="flex items-center space-x-2">
@@ -571,7 +802,7 @@ onBeforeUnmount(() => {
                     d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
                 />
               </svg>
-              {{ chartType === "bar" ? t("dashboard.switchToLineChart") : t("dashboard.switchToBarChart") }}
+              {{ chartType === "bar" ? t("admin.dashboard.switchToLineChart") : t("admin.dashboard.switchToBarChart") }}
             </button>
           </div>
         </div>
@@ -592,7 +823,7 @@ onBeforeUnmount(() => {
               </div>
               <div>
                 <p class="text-xs font-medium" :class="darkMode ? 'text-blue-200' : 'text-blue-700'">
-                  {{ t("dashboard.weeklyPastes") }}
+                  {{ t("admin.dashboard.weeklyPastes") }}
                 </p>
                 <p class="text-lg font-semibold" :class="darkMode ? 'text-white' : 'text-gray-800'">
                   {{ totalWeekPastes }}
@@ -615,7 +846,7 @@ onBeforeUnmount(() => {
               </div>
               <div>
                 <p class="text-xs font-medium" :class="darkMode ? 'text-green-200' : 'text-green-700'">
-                  {{ t("dashboard.weeklyFiles") }}
+                  {{ t("admin.dashboard.weeklyFiles") }}
                 </p>
                 <p class="text-lg font-semibold" :class="darkMode ? 'text-white' : 'text-gray-800'">
                   {{ totalWeekFiles }}
@@ -638,7 +869,7 @@ onBeforeUnmount(() => {
               </div>
               <div>
                 <p class="text-xs font-medium" :class="darkMode ? 'text-purple-200' : 'text-purple-700'">
-                  {{ t("dashboard.mostActiveDate") }}
+                  {{ t("admin.dashboard.mostActiveDate") }}
                 </p>
                 <p class="text-lg font-semibold" :class="darkMode ? 'text-white' : 'text-gray-800'">
                   {{ dateLabels[weeklyMaxValues.maxDay] }}
@@ -657,9 +888,9 @@ onBeforeUnmount(() => {
               </div>
               <div>
                 <p class="text-xs font-medium" :class="darkMode ? 'text-yellow-200' : 'text-yellow-700'">
-                  {{ t("dashboard.highestDailyActivity") }}
+                  {{ t("admin.dashboard.highestDailyActivity") }}
                 </p>
-                <p class="text-lg font-semibold" :class="darkMode ? 'text-white' : 'text-gray-800'">{{ weeklyMaxValues.maxValue }} {{ t("dashboard.items") }}</p>
+                <p class="text-lg font-semibold" :class="darkMode ? 'text-white' : 'text-gray-800'">{{ weeklyMaxValues.maxValue }} {{ t("admin.dashboard.items") }}</p>
               </div>
             </div>
           </div>
@@ -674,9 +905,30 @@ onBeforeUnmount(() => {
     </div>
 
     <!-- 系统信息卡片 -->
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+    <div class="flex flex-col sm:flex-row gap-4">
+      <!-- 版本信息 -->
+      <div class="flex-1 p-3 rounded-lg shadow transition-shadow hover:shadow-md" :class="darkMode ? 'bg-gray-700' : 'bg-white'">
+        <div class="flex items-center mb-2">
+          <div class="w-6 h-6 rounded-full flex items-center justify-center mr-2" :class="darkMode ? 'bg-purple-500/20 text-purple-400' : 'bg-purple-100 text-purple-600'">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M7 4V2a1 1 0 011-1h8a1 1 0 011 1v2m0 0V3a1 1 0 011 1v1M7 4V3a1 1 0 011-1v1m8 0V3a1 1 0 00-1-1v1m-8 0h8m-8 0v16a1 1 0 001 1h6a1 1 0 001-1V4"
+              />
+            </svg>
+          </div>
+          <h3 class="text-sm font-medium" :class="darkMode ? 'text-gray-300' : 'text-gray-500'">
+            {{ t("admin.dashboard.systemVersion") }}
+          </h3>
+        </div>
+        <p v-if="!versionInfo.error" class="text-sm ml-8" :class="darkMode ? 'text-gray-400' : 'text-gray-600'">v{{ versionInfo.version }}</p>
+        <p v-else class="text-sm ml-8 text-red-500">{{ versionInfo.error }}</p>
+      </div>
+
       <!-- 服务器信息 -->
-      <div class="p-3 rounded-lg shadow transition-shadow hover:shadow-md" :class="darkMode ? 'bg-gray-700' : 'bg-white'">
+      <div class="flex-1 p-3 rounded-lg shadow transition-shadow hover:shadow-md" :class="darkMode ? 'bg-gray-700' : 'bg-white'">
         <div class="flex items-center mb-2">
           <div class="w-6 h-6 rounded-full flex items-center justify-center mr-2" :class="darkMode ? 'bg-blue-500/20 text-blue-400' : 'bg-blue-100 text-blue-600'">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -689,14 +941,17 @@ onBeforeUnmount(() => {
             </svg>
           </div>
           <h3 class="text-sm font-medium" :class="darkMode ? 'text-gray-300' : 'text-gray-500'">
-            {{ t("dashboard.serverEnvironment") }}
+            {{ t("admin.dashboard.serverEnvironment") }}
           </h3>
         </div>
-        <p class="text-sm ml-8" :class="darkMode ? 'text-gray-400' : 'text-gray-600'">Cloudflare Workers</p>
+        <p v-if="!versionInfo.error" class="text-sm ml-8" :class="darkMode ? 'text-gray-400' : 'text-gray-600'">
+          {{ versionInfo.environment }}
+        </p>
+        <p v-else class="text-sm ml-8 text-red-500">{{ versionInfo.error }}</p>
       </div>
 
       <!-- 数据库信息 -->
-      <div class="p-3 rounded-lg shadow transition-shadow hover:shadow-md" :class="darkMode ? 'bg-gray-700' : 'bg-white'">
+      <div class="flex-1 p-3 rounded-lg shadow transition-shadow hover:shadow-md" :class="darkMode ? 'bg-gray-700' : 'bg-white'">
         <div class="flex items-center mb-2">
           <div class="w-6 h-6 rounded-full flex items-center justify-center mr-2" :class="darkMode ? 'bg-green-500/20 text-green-400' : 'bg-green-100 text-green-600'">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -709,14 +964,17 @@ onBeforeUnmount(() => {
             </svg>
           </div>
           <h3 class="text-sm font-medium" :class="darkMode ? 'text-gray-300' : 'text-gray-500'">
-            {{ t("dashboard.dataStorage") }}
+            {{ t("admin.dashboard.dataStorage") }}
           </h3>
         </div>
-        <p class="text-sm ml-8" :class="darkMode ? 'text-gray-400' : 'text-gray-600'">Cloudflare D1</p>
+        <p v-if="!versionInfo.error" class="text-sm ml-8" :class="darkMode ? 'text-gray-400' : 'text-gray-600'">
+          {{ versionInfo.storage }}
+        </p>
+        <p v-else class="text-sm ml-8 text-red-500">{{ versionInfo.error }}</p>
       </div>
 
       <!-- 上次更新时间 -->
-      <div class="p-3 rounded-lg shadow transition-shadow hover:shadow-md" :class="darkMode ? 'bg-gray-700' : 'bg-white'">
+      <div class="flex-1 p-3 rounded-lg shadow transition-shadow hover:shadow-md" :class="darkMode ? 'bg-gray-700' : 'bg-white'">
         <div class="flex items-center mb-2">
           <div class="w-6 h-6 rounded-full flex items-center justify-center mr-2" :class="darkMode ? 'bg-purple-500/20 text-purple-400' : 'bg-purple-100 text-purple-600'">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -724,7 +982,7 @@ onBeforeUnmount(() => {
             </svg>
           </div>
           <h3 class="text-sm font-medium" :class="darkMode ? 'text-gray-300' : 'text-gray-500'">
-            {{ t("dashboard.lastUpdated") }}
+            {{ t("admin.dashboard.lastUpdated") }}
           </h3>
         </div>
         <p class="text-sm ml-8" :class="darkMode ? 'text-gray-400' : 'text-gray-600'">
@@ -741,6 +999,27 @@ onBeforeUnmount(() => {
   transition-property: all;
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
   transition-duration: 300ms;
+}
+
+/* 缓存卡片折叠动画 */
+.slide-down-enter-active,
+.slide-down-leave-active {
+  transition: all 0.3s ease;
+  overflow: hidden;
+}
+
+.slide-down-enter-from,
+.slide-down-leave-to {
+  max-height: 0;
+  opacity: 0;
+  transform: translateY(-10px);
+}
+
+.slide-down-enter-to,
+.slide-down-leave-from {
+  max-height: 200px;
+  opacity: 1;
+  transform: translateY(0);
 }
 
 /* 悬停效果 */

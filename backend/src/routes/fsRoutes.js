@@ -16,13 +16,13 @@ import {
   uploadFile,
   removeItem,
   renameItem,
-  previewFile,
   batchRemoveItems,
   getFilePresignedUrl,
   updateFile,
   copyItem,
   batchCopyItems,
 } from "../services/fsService.js";
+import { searchFiles } from "../services/searchService.js";
 import { findMountPointByPath } from "../webdav/utils/webdavUtils.js";
 import { generatePresignedPutUrl, buildS3Url, createS3Client } from "../utils/s3Utils.js";
 import { directoryCacheManager, clearCache } from "../utils/DirectoryCache.js";
@@ -202,7 +202,8 @@ fsRoutes.get("/api/admin/fs/download", async (c) => {
 
   try {
     // 直接返回downloadFile的响应，文件内容会直接从服务器流式传输
-    const response = await downloadFile(db, path, adminId, "admin", c.env.ENCRYPTION_SECRET);
+    // 传递请求对象以支持Range请求
+    const response = await downloadFile(db, path, adminId, "admin", c.env.ENCRYPTION_SECRET, c.req.raw);
 
     // 替换Access-Control-Allow-Origin头部为实际的Origin
     const origin = c.req.header("Origin");
@@ -219,41 +220,6 @@ fsRoutes.get("/api/admin/fs/download", async (c) => {
       return c.json(createErrorResponse(error.status, error.message), error.status);
     }
     return c.json(createErrorResponse(ApiStatus.INTERNAL_ERROR, error.message || "下载文件失败"), ApiStatus.INTERNAL_ERROR);
-  }
-});
-
-// 预览文件 - 管理员版本
-fsRoutes.get("/api/admin/fs/preview", async (c) => {
-  const db = c.env.DB;
-  const path = c.req.query("path");
-  const adminId = PermissionUtils.getUserId(c);
-
-  // 设置CORS头部
-  setCorsHeaders(c);
-
-  if (!path) {
-    return c.json(createErrorResponse(ApiStatus.BAD_REQUEST, "请提供文件路径"), ApiStatus.BAD_REQUEST);
-  }
-
-  try {
-    // 直接返回previewFile的响应，文件内容会直接从服务器流式传输
-    const response = await previewFile(db, path, adminId, "admin", c.env.ENCRYPTION_SECRET);
-
-    // 替换Access-Control-Allow-Origin头部为实际的Origin
-    const origin = c.req.header("Origin");
-    if (origin) {
-      response.headers.set("Access-Control-Allow-Origin", origin);
-    }
-
-    return response;
-  } catch (error) {
-    // 确保即使发生错误，也添加CORS头部
-    setCorsHeaders(c);
-    console.error("预览文件错误:", error);
-    if (error instanceof HTTPException) {
-      return c.json(createErrorResponse(error.status, error.message), error.status);
-    }
-    return c.json(createErrorResponse(ApiStatus.INTERNAL_ERROR, error.message || "预览文件失败"), ApiStatus.INTERNAL_ERROR);
   }
 });
 
@@ -272,7 +238,8 @@ fsRoutes.get("/api/user/fs/download", async (c) => {
 
   try {
     // 直接返回downloadFile的响应，文件内容会直接从服务器流式传输
-    const response = await downloadFile(db, path, apiKeyInfo, "apiKey", c.env.ENCRYPTION_SECRET);
+    // 传递请求对象以支持Range请求
+    const response = await downloadFile(db, path, apiKeyInfo, "apiKey", c.env.ENCRYPTION_SECRET, c.req.raw);
 
     // 替换Access-Control-Allow-Origin头部为实际的Origin
     const origin = c.req.header("Origin");
@@ -289,41 +256,6 @@ fsRoutes.get("/api/user/fs/download", async (c) => {
       return c.json(createErrorResponse(error.status, error.message), error.status);
     }
     return c.json(createErrorResponse(ApiStatus.INTERNAL_ERROR, error.message || "下载文件失败"), ApiStatus.INTERNAL_ERROR);
-  }
-});
-
-// 预览文件 - API密钥用户版本
-fsRoutes.get("/api/user/fs/preview", async (c) => {
-  const db = c.env.DB;
-  const path = c.req.query("path");
-  const apiKeyInfo = PermissionUtils.getApiKeyInfo(c);
-
-  // 设置CORS头部
-  setCorsHeaders(c);
-
-  if (!path) {
-    return c.json(createErrorResponse(ApiStatus.BAD_REQUEST, "请提供文件路径"), ApiStatus.BAD_REQUEST);
-  }
-
-  try {
-    // 直接返回previewFile的响应，文件内容会直接从服务器流式传输
-    const response = await previewFile(db, path, apiKeyInfo, "apiKey", c.env.ENCRYPTION_SECRET);
-
-    // 替换Access-Control-Allow-Origin头部为实际的Origin
-    const origin = c.req.header("Origin");
-    if (origin) {
-      response.headers.set("Access-Control-Allow-Origin", origin);
-    }
-
-    return response;
-  } catch (error) {
-    // 确保即使发生错误，也添加CORS头部
-    setCorsHeaders(c);
-    console.error("预览文件错误:", error);
-    if (error instanceof HTTPException) {
-      return c.json(createErrorResponse(error.status, error.message), error.status);
-    }
-    return c.json(createErrorResponse(ApiStatus.INTERNAL_ERROR, error.message || "预览文件失败"), ApiStatus.INTERNAL_ERROR);
   }
 });
 
@@ -1023,7 +955,7 @@ fsRoutes.post("/api/admin/fs/presign", async (c) => {
     const finalContentType = getMimeTypeFromFilename(fileName);
     console.log(`预签名上传：从文件名[${fileName}]推断MIME类型: ${finalContentType}`);
 
-    // 生成预签名URL
+    // 生成预签名URL，使用S3配置的默认时效
     const presignedUrl = await generatePresignedPutUrl(s3Config, s3Path, finalContentType, encryptionSecret);
 
     // 构建S3直接访问URL
@@ -1134,7 +1066,7 @@ fsRoutes.post("/api/user/fs/presign", async (c) => {
     const finalContentType = getMimeTypeFromFilename(fileName);
     console.log(`预签名上传：从文件名[${fileName}]推断MIME类型: ${finalContentType}`);
 
-    // 生成预签名URL
+    // 生成预签名URL，使用S3配置的默认时效
     const presignedUrl = await generatePresignedPutUrl(s3Config, s3Path, finalContentType, encryptionSecret);
 
     // 构建S3直接访问URL
@@ -1369,7 +1301,9 @@ fsRoutes.get("/api/admin/fs/file-link", baseAuthMiddleware, requireAdminMiddlewa
   const db = c.env.DB;
   const path = c.req.query("path");
   const adminId = PermissionUtils.getUserId(c);
-  const expiresIn = parseInt(c.req.query("expires_in") || "604800"); // 默认7天
+  // 如果前端传入null或空值，则使用S3配置的默认签名时间，否则使用传入的值
+  const expiresInParam = c.req.query("expires_in");
+  const expiresIn = expiresInParam && expiresInParam !== "null" ? parseInt(expiresInParam) : null;
   const forceDownload = c.req.query("force_download") === "true";
 
   if (!path) {
@@ -1398,7 +1332,9 @@ fsRoutes.get("/api/user/fs/file-link", baseAuthMiddleware, requireFilePermission
   const db = c.env.DB;
   const path = c.req.query("path");
   const apiKeyInfo = PermissionUtils.getApiKeyInfo(c);
-  const expiresIn = parseInt(c.req.query("expires_in") || "604800"); // 默认7天
+  // 如果前端传入null或空值，则使用S3配置的默认签名时间，否则使用传入的值
+  const expiresInParam = c.req.query("expires_in");
+  const expiresIn = expiresInParam && expiresInParam !== "null" ? parseInt(expiresInParam) : null;
   const forceDownload = c.req.query("force_download") === "true";
 
   if (!path) {
@@ -1854,6 +1790,85 @@ fsRoutes.post("/api/user/fs/batch-copy-commit", baseAuthMiddleware, requireFileP
       return c.json(createErrorResponse(error.status, error.message), error.status);
     }
     return c.json(createErrorResponse(ApiStatus.INTERNAL_ERROR, error.message || "提交批量复制完成失败"), ApiStatus.INTERNAL_ERROR);
+  }
+});
+
+/**
+ * 提取搜索参数
+ * @param {Record<string, string>} queryParams - 查询参数对象
+ * @returns {Object} 搜索参数对象
+ */
+function extractSearchParams(queryParams) {
+  const query = queryParams.q || "";
+  const scope = queryParams.scope || "global"; // global, mount, directory
+  const mountId = queryParams.mount_id || "";
+  const path = queryParams.path || "";
+  const limit = parseInt(queryParams.limit) || 50;
+  const offset = parseInt(queryParams.offset) || 0;
+
+  return {
+    query,
+    scope,
+    mountId,
+    path,
+    limit: Math.min(limit, 200), // 限制最大返回数量
+    offset: Math.max(offset, 0),
+  };
+}
+
+// 搜索文件 - 管理员版本
+fsRoutes.get("/api/admin/fs/search", baseAuthMiddleware, requireAdminMiddleware, async (c) => {
+  const db = c.env.DB;
+  const searchParams = extractSearchParams(c.req.query());
+  const adminId = PermissionUtils.getUserId(c);
+
+  // 参数验证
+  if (!searchParams.query || searchParams.query.trim().length < 2) {
+    return c.json(createErrorResponse(ApiStatus.BAD_REQUEST, "搜索查询至少需要2个字符"), ApiStatus.BAD_REQUEST);
+  }
+
+  try {
+    const result = await searchFiles(db, searchParams, adminId, "admin", c.env.ENCRYPTION_SECRET);
+    return c.json({
+      code: ApiStatus.SUCCESS,
+      message: "搜索完成",
+      data: result,
+      success: true,
+    });
+  } catch (error) {
+    console.error("管理员搜索文件错误:", error);
+    if (error instanceof HTTPException) {
+      return c.json(createErrorResponse(error.status, error.message), error.status);
+    }
+    return c.json(createErrorResponse(ApiStatus.INTERNAL_ERROR, error.message || "搜索文件失败"), ApiStatus.INTERNAL_ERROR);
+  }
+});
+
+// 搜索文件 - API密钥用户版本
+fsRoutes.get("/api/user/fs/search", baseAuthMiddleware, requireFilePermissionMiddleware, async (c) => {
+  const db = c.env.DB;
+  const searchParams = extractSearchParams(c.req.query());
+  const apiKeyInfo = PermissionUtils.getApiKeyInfo(c);
+
+  // 参数验证
+  if (!searchParams.query || searchParams.query.trim().length < 2) {
+    return c.json(createErrorResponse(ApiStatus.BAD_REQUEST, "搜索查询至少需要2个字符"), ApiStatus.BAD_REQUEST);
+  }
+
+  try {
+    const result = await searchFiles(db, searchParams, apiKeyInfo, "apiKey", c.env.ENCRYPTION_SECRET);
+    return c.json({
+      code: ApiStatus.SUCCESS,
+      message: "搜索完成",
+      data: result,
+      success: true,
+    });
+  } catch (error) {
+    console.error("API密钥用户搜索文件错误:", error);
+    if (error instanceof HTTPException) {
+      return c.json(createErrorResponse(error.status, error.message), error.status);
+    }
+    return c.json(createErrorResponse(ApiStatus.INTERNAL_ERROR, error.message || "搜索文件失败"), ApiStatus.INTERNAL_ERROR);
   }
 });
 

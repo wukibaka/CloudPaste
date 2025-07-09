@@ -4,8 +4,12 @@ import { useRoute } from "vue-router";
 import EnvSwitcher from "./components/EnvSwitcher.vue";
 import LanguageSwitcher from "./components/LanguageSwitcher.vue";
 import PWAInstallPrompt from "./components/PWAInstallPrompt.vue";
+import { useAuthStore } from "./stores/authStore.js";
 
 const route = useRoute();
+
+// 使用认证Store
+const authStore = useAuthStore();
 
 // 初始化主题模式状态
 const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
@@ -112,7 +116,7 @@ onMounted(() => {
     // 在生产环境中，只有在明确的条件下才显示：
     // 1. 存在管理员token
     // 2. URL中有特定的参数 (showEnvSwitcher) 如："https://域名.com?showEnvSwitcher"
-    const hasAdminToken = !!localStorage.getItem("admin_token");
+    const hasAdminToken = authStore.isAdmin;
     const urlParams = new URLSearchParams(window.location.search);
     const hasEnvParam = urlParams.has("showEnvSwitcher");
 

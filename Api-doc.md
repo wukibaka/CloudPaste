@@ -13,11 +13,85 @@
 }
 ```
 
+## 认证方式
+
+### 1. 管理员认证
+
+使用 Bearer Token 认证，需要在请求头中添加：
+
+```
+Authorization: Bearer <admin_token>
+```
+
+管理员令牌通过 `/api/admin/login` 接口获取。
+
+### 2. API 密钥认证
+
+使用 ApiKey 认证，需要在请求头中添加：
+
+```
+Authorization: ApiKey <api_key>
+```
+
+API 密钥由管理员在后台创建，支持以下权限类型：
+
+- **text_permission**: 文本分享权限 - 允许创建、查看、修改和删除文本分享
+- **file_permission**: 文件管理权限 - 允许上传、下载、管理文件和使用文件系统 API
+- **mount_permission**: 挂载点权限 - 允许访问挂载点和使用 WebDAV 功能
+- **basic_path**: 路径权限限制 - 限制 API 密钥用户只能访问指定路径及其子路径
+
+### 3. WebDAV 认证
+
+WebDAV 支持两种认证方式：
+
+#### Basic Auth（推荐）
+
+```
+Authorization: Basic <base64(api_key:api_key)>
+```
+
+#### Bearer Token
+
+```
+Authorization: Bearer <api_key>
+```
+
+### 4. 自定义授权头
+
+部分 API 还支持自定义授权头：
+
+```
+X-Custom-Auth-Key: <api_key>
+```
+
+### 认证错误响应
+
+认证失败时返回统一的错误格式：
+
+```json
+{
+  "code": 401,
+  "message": "需要认证访问",
+  "success": false
+}
+```
+
+权限不足时返回：
+
+```json
+{
+  "code": 403,
+  "message": "权限不足",
+  "success": false
+}
+```
+
 ### 公共 API
 
 #### 基础 API
 
 - `GET /api/health`
+
   - 描述：API 健康检查端点，用于监控服务状态
   - 参数：无
   - 响应：
@@ -28,22 +102,59 @@
     }
     ```
 
-#### 系统设置 API
-
-- `GET /api/system/max-upload-size`
-  - 描述：获取系统允许的最大上传文件大小
+- `GET /api/version`
+  - 描述：获取系统版本信息
   - 参数：无
-  - 响应：包含 max_upload_size 的对象
+  - 响应：包含版本号、应用名称、运行环境、存储类型、Node.js 版本和运行时间的系统信息
+  - 响应示例：
     ```json
     {
       "code": 200,
-      "message": "获取最大上传大小成功",
+      "message": "获取版本信息成功",
       "data": {
-        "max_upload_size": 100
+        "version": "0.6.5",
+        "name": "cloudpaste-api",
+        "environment": "Docker",
+        "storage": "SQLite",
+        "nodeVersion": "v18.17.0",
+        "uptime": 3600
       },
       "success": true
     }
     ```
+
+#### 系统设置 API
+
+- `GET /api/admin/system-settings`
+
+  - 描述：获取系统设置信息
+  - 授权：需要管理员令牌
+  - 响应：包含系统设置的对象
+    ```json
+    {
+      "code": 200,
+      "message": "获取系统设置成功",
+      "data": {
+        "max_upload_size": 100,
+        "default_paste_expiry": 7,
+        "default_file_expiry": 7
+      },
+      "success": true
+    }
+    ```
+
+- `PUT /api/admin/system-settings`
+  - 描述：更新系统设置
+  - 授权：需要管理员令牌
+  - 请求体：
+    ```json
+    {
+      "max_upload_size": 100, // 可选，最大上传大小（MB）
+      "default_paste_expiry": 7, // 可选，默认文本过期天数
+      "default_file_expiry": 7 // 可选，默认文件过期天数
+    }
+    ```
+  - 响应：更新后的系统设置
 
 ### 文本分享 API
 
@@ -56,41 +167,41 @@
   - 请求体：
     ```json
     {
-      "content": "文本内容", // 必填
-      "remark": "备注说明", // 可选
-      "slug": "自定义短链接", // 可选，如不提供则自动生成
-      "password": "访问密码", // 可选
+      "content": "要分享的文本内容", // 必填
+      "remark": "备注信息", // 可选
       "expiresAt": "2023-12-31T23:59:59Z", // 可选，过期时间
-      "maxViews": 10 // 可选，最大查看次数
+      "maxViews": 100, // 可选，最大查看次数
+      "password": "访问密码", // 可选
+      "slug": "custom-slug" // 可选，自定义短链接
     }
     ```
-  - 响应：新创建的文本分享信息
+  - 响应：创建的文本分享信息，包含访问链接
 
 - `GET /api/paste/:slug`
 
-  - 描述：获取文本分享内容（无密码情况）
-  - 参数：slug - 文本分享的唯一标识
-  - 响应：如需密码则返回 requiresPassword=true，无需密码则返回完整内容
+  - 描述：获取文本分享内容
+  - 参数：slug - 文本短链接
+  - 响应：文本分享内容，如果需要密码则返回密码提示
 
 - `POST /api/paste/:slug`
 
-  - 描述：使用密码获取文本分享内容
-  - 参数：slug - 文本分享的唯一标识
+  - 描述：使用密码获取受保护的文本分享
+  - 参数：slug - 文本短链接
   - 请求体：
     ```json
     {
-      "password": "访问密码"
+      "password": "访问密码" // 必填
     }
     ```
-  - 响应：验证成功后返回完整内容
+  - 响应：验证成功后返回文本分享内容
 
 - `GET /api/raw/:slug`
-  - 描述：以纯文本格式获取文本分享内容
-  - 参数：slug - 文本分享的唯一标识
+
+  - 描述：获取文本分享的原始内容（纯文本格式）
+  - 参数：slug - 文本短链接
   - 查询参数：
-    - `password` - 访问密码（如需）
-  - 响应：直接返回原始文本内容，Content-Type 为 text/plain
-  - 注意：如果文本需要密码保护，必须通过查询参数提供正确密码
+    - `password` - 如果文本受密码保护，需提供密码
+  - 响应：纯文本格式的内容，Content-Type 为 text/plain
 
 #### API 密钥用户文本管理
 
@@ -98,7 +209,9 @@
 
   - 描述：API 密钥用户获取自己的文本分享列表
   - 授权：需要有文本权限的 API 密钥
-  - 参数：limit(默认 30), offset(默认 0)
+  - 查询参数：
+    - `limit` - 每页数量，默认为 30
+    - `offset` - 偏移量，默认为 0
   - 响应：文本分享列表和分页信息
 
 - `GET /api/user/pastes/:id`
@@ -106,19 +219,13 @@
   - 描述：API 密钥用户获取单个文本详情
   - 授权：需要有文本权限的 API 密钥
   - 参数：id - 文本 ID
-  - 响应：文本分享详细信息
+  - 响应：文本分享详细信息，包含明文密码（如有）
 
 - `DELETE /api/user/pastes/:id`
 
   - 描述：API 密钥用户删除单个文本
   - 授权：需要有文本权限的 API 密钥
   - 参数：id - 文本 ID
-  - 响应：删除结果
-
-- `DELETE /api/user/pastes`
-
-  - 描述：API 密钥用户删除所有文本
-  - 授权：需要有文本权限的 API 密钥
   - 响应：删除结果
 
 - `POST /api/user/pastes/batch-delete`
@@ -146,7 +253,10 @@
 
   - 描述：管理员获取所有文本分享列表
   - 授权：需要管理员令牌
-  - 参数：limit(默认 30), offset(默认 0)
+  - 查询参数：
+    - `page` - 页码，默认为 1
+    - `limit` - 每页数量，默认为 10
+    - `created_by` - 可选，按创建者筛选
   - 响应：文本分享列表和分页信息
 
 - `GET /api/admin/pastes/:id`
@@ -161,12 +271,6 @@
   - 描述：管理员删除单个文本
   - 授权：需要管理员令牌
   - 参数：id - 文本 ID
-  - 响应：删除结果
-
-- `DELETE /api/admin/pastes`
-
-  - 描述：管理员删除所有文本
-  - 授权：需要管理员令牌
   - 响应：删除结果
 
 - `POST /api/admin/pastes/batch-delete`
@@ -320,8 +424,12 @@
 
   - 描述：管理员获取所有文件列表
   - 授权：需要管理员令牌
-  - 参数：limit(默认 30), offset(默认 0)
-  - 响应：文件列表和分页信息
+  - 查询参数：
+    - `limit` - 每页数量，默认为 30
+    - `offset` - 偏移量，默认为 0
+    - `created_by` - 可选，按创建者筛选
+    - `s3_config_id` - 可选，按 S3 配置 ID 筛选
+  - 响应：文件列表和分页信息，包含 API 密钥名称等详细信息
 
 - `GET /api/admin/files/:id`
 
@@ -459,10 +567,68 @@
     }
     ```
 
+- `GET /api/test/api-key`
+
+  - 描述：测试 API 密钥有效性
+  - 授权：需要有效的 API 密钥
+  - 响应：API 密钥验证状态和权限信息
+    ```json
+    {
+      "code": 200,
+      "message": "API密钥验证成功",
+      "data": {
+        "name": "密钥名称",
+        "basic_path": "/",
+        "permissions": {
+          "text": true,
+          "file": false,
+          "mount": true
+        },
+        "key_info": {
+          "id": "密钥ID",
+          "name": "密钥名称",
+          "basic_path": "/"
+        }
+      },
+      "success": true
+    }
+    ```
+
 - `GET /api/admin/dashboard/stats`
   - 描述：获取管理员仪表盘统计数据
   - 授权：需要管理员令牌
   - 响应：系统统计数据，包含文本和文件使用情况、用户活跃度和系统性能指标
+  - 响应示例：
+    ```json
+    {
+      "code": 200,
+      "message": "获取仪表盘统计数据成功",
+      "data": {
+        "pastes": {
+          "total": 1250,
+          "today": 45,
+          "thisWeek": 320,
+          "thisMonth": 1100
+        },
+        "files": {
+          "total": 850,
+          "today": 25,
+          "thisWeek": 180,
+          "thisMonth": 650,
+          "totalSize": "2.5GB"
+        },
+        "apiKeys": {
+          "total": 15,
+          "active": 12
+        },
+        "storage": {
+          "configs": 3,
+          "mounts": 5
+        }
+      },
+      "success": true
+    }
+    ```
 
 ### API 密钥管理 API
 
@@ -543,11 +709,40 @@
 
 ### 系统设置 API
 
+- `GET /api/system/max-upload-size`
+
+  - 描述：获取系统允许的最大上传文件大小（公共 API，无需认证）
+  - 授权：无需授权
+  - 响应：包含最大上传大小的对象
+    ```json
+    {
+      "code": 200,
+      "message": "获取最大上传大小成功",
+      "data": {
+        "max_upload_size": 100
+      },
+      "success": true
+    }
+    ```
+
 - `GET /api/admin/system-settings`
 
   - 描述：获取系统设置
   - 授权：需要管理员令牌
   - 响应：系统设置信息，包含最大上传大小等系统参数
+    ```json
+    {
+      "code": 200,
+      "message": "获取系统设置成功",
+      "data": {
+        "max_upload_size": 100,
+        "default_paste_expiry": 7,
+        "default_file_expiry": 7,
+        "webdav_upload_mode": "auto"
+      },
+      "success": true
+    }
+    ```
 
 - `PUT /api/admin/system-settings`
   - 描述：更新系统设置
@@ -555,9 +750,10 @@
   - 请求体：
     ```json
     {
-      "max_upload_size": 100, // 最大上传大小（MB）
-      "default_paste_expiry": 7, // 默认文本过期天数
-      "default_file_expiry": 7 // 默认文件过期天数
+      "max_upload_size": 100, // 可选，最大上传大小（MB）
+      "default_paste_expiry": 7, // 可选，默认文本过期天数
+      "default_file_expiry": 7, // 可选，默认文件过期天数
+      "webdav_upload_mode": "auto" // 可选，WebDAV上传模式：auto/proxy/multipart/direct
     }
     ```
   - 响应：更新后的系统设置
@@ -568,18 +764,35 @@
 
 - `GET /api/admin/cache/stats`
 
-  - 描述：获取目录缓存统计信息
-  - 授权：无需授权（公开接口）
-  - 响应：缓存统计数据
+  - 描述：获取系统监控信息，包括缓存统计和系统内存信息
+  - 授权：需要管理员令牌
+  - 响应：系统监控信息，包括缓存统计和系统信息
     ```json
     {
       "code": 200,
-      "message": "获取缓存统计成功",
+      "message": "获取系统监控信息成功",
       "data": {
-        "totalEntries": 150,
-        "hitRate": 0.85,
-        "missRate": 0.15,
-        "cacheSize": "2.5MB"
+        "cache": {
+          "directory": {
+            "totalEntries": 150,
+            "hitRate": 0.85,
+            "missRate": 0.15
+          },
+          "s3Url": {
+            "totalEntries": 50,
+            "hitRate": 0.9,
+            "missRate": 0.1
+          }
+        },
+        "system": {
+          "memory": {
+            "used": 128,
+            "free": 512,
+            "total": 640
+          },
+          "uptime": 3600
+        },
+        "timestamp": "2023-05-01T12:00:00Z"
       },
       "success": true
     }
@@ -715,14 +928,6 @@
   - 查询参数：
     - `path` - 文件路径
   - 响应：文件内容（下载），包含 Content-Disposition: attachment 头
-
-- `GET /api/admin/fs/preview`
-
-  - 描述：预览文件（浏览器内查看）
-  - 授权：需要管理员令牌
-  - 查询参数：
-    - `path` - 文件路径
-  - 响应：文件内容（预览），包含 Content-Disposition: inline 头
 
 - `POST /api/admin/fs/mkdir`
 
@@ -896,6 +1101,53 @@
     ```
   - 响应：提交结果，包含成功和失败的文件数量
 
+- `GET /api/admin/fs/search`
+
+  - 描述：搜索文件和目录
+  - 授权：需要管理员令牌
+  - 查询参数：
+    - `query` - 搜索关键词（必填，至少 2 个字符）
+    - `scope` - 搜索范围（可选，默认为"global"）
+      - `global` - 全局搜索，搜索所有可访问的挂载点
+      - `mount` - 单个挂载点搜索，需要配合 mount_id 参数
+      - `directory` - 目录搜索，搜索指定路径及其子目录，需要配合 path 参数
+    - `mount_id` - 挂载点 ID（当 scope 为"mount"时必填）
+    - `path` - 搜索路径（当 scope 为"directory"时必填）
+    - `limit` - 结果数量限制（可选，默认 50，最大 200）
+    - `offset` - 结果偏移量（可选，默认 0）
+  - 响应：搜索结果
+    ```json
+    {
+      "code": 200,
+      "message": "搜索完成",
+      "data": {
+        "results": [
+          {
+            "name": "文件名.txt",
+            "path": "/path/to/file.txt",
+            "size": 1024,
+            "lastModified": "2023-01-01T00:00:00.000Z",
+            "isDirectory": false,
+            "mimeType": "text/plain",
+            "mountId": "mount-123",
+            "mountName": "我的存储",
+            "relativePath": "folder/file.txt"
+          }
+        ],
+        "total": 25,
+        "hasMore": false,
+        "searchParams": {
+          "query": "搜索关键词",
+          "scope": "global",
+          "limit": 50,
+          "offset": 0
+        },
+        "mountsSearched": 3
+      },
+      "success": true
+    }
+    ```
+
 #### 文件夹和文件操作 - API 密钥用户版本
 
 - `GET /api/user/fs/list`
@@ -921,14 +1173,6 @@
   - 查询参数：
     - `path` - 文件路径
   - 响应：文件内容（下载），包含 Content-Disposition: attachment 头
-
-- `GET /api/user/fs/preview`
-
-  - 描述：预览文件（浏览器内查看）
-  - 授权：需要有文件权限的 API 密钥
-  - 查询参数：
-    - `path` - 文件路径
-  - 响应：文件内容（预览），包含 Content-Disposition: inline 头
 
 - `POST /api/user/fs/mkdir`
 
@@ -1072,6 +1316,23 @@
     }
     ```
   - 响应：提交结果，包含成功和失败的文件数量
+
+- `GET /api/user/fs/search`
+
+  - 描述：搜索文件和目录
+  - 授权：需要有文件权限的 API 密钥
+  - 查询参数：
+    - `query` - 搜索关键词（必填，至少 2 个字符）
+    - `scope` - 搜索范围（可选，默认为"global"）
+      - `global` - 全局搜索，搜索 API 密钥可访问的所有挂载点
+      - `mount` - 单个挂载点搜索，需要配合 mount_id 参数
+      - `directory` - 目录搜索，搜索指定路径及其子目录，需要配合 path 参数
+    - `mount_id` - 挂载点 ID（当 scope 为"mount"时必填）
+    - `path` - 搜索路径（当 scope 为"directory"时必填，受 basic_path 权限限制）
+    - `limit` - 结果数量限制（可选，默认 50，最大 200）
+    - `offset` - 结果偏移量（可选，默认 0）
+  - 响应：搜索结果，格式同管理员版本
+  - 注意：API 密钥用户只能搜索其 basic_path 权限范围内的文件和目录
 
 #### 分片上传 API - 管理员版本
 
@@ -1344,33 +1605,6 @@
 
 ## API 使用说明
 
-### 认证方式
-
-1. **管理员认证**：使用 Bearer Token 认证
-
-   ```
-   Authorization: Bearer <admin_token>
-   ```
-
-2. **API 密钥认证**：使用 Bearer Token 认证
-
-   ```
-   Authorization: Bearer <api_key>
-   ```
-
-3. **WebDAV 认证**：支持 Basic Auth 和 Bearer Token
-   ```
-   Authorization: Basic <base64(api_key:api_key)>
-   Authorization: Bearer <api_key>
-   ```
-
-### API 密钥权限说明
-
-- **text_permission**：允许创建、查看、修改和删除文本分享
-- **file_permission**：允许上传、下载、管理文件和使用文件系统 API
-- **mount_permission**：允许访问挂载点和使用 WebDAV 功能
-- **basic_path**：限制 API 密钥用户只能访问指定路径及其子路径
-
 ### 错误处理
 
 所有 API 在出错时返回统一的错误格式：
@@ -1405,7 +1639,7 @@
 
 ### 文件上传限制
 
-- 最大文件大小由系统设置决定，可通过 `/api/system/max-upload-size` 查询
+- 最大文件大小由系统设置决定，可通过 `/api/system/max-upload-size`（公共 API）或 `/api/admin/system-settings`（管理员 API）查询
 - 大文件建议使用分片上传或预签名 URL 上传
 - API 密钥用户受 basic_path 路径限制
 
@@ -1414,3 +1648,11 @@
 - 系统使用目录缓存提高性能
 - 管理员和 API 密钥用户都可以手动清理缓存
 - 文件操作会自动清理相关缓存
+
+#### 搜索缓存
+
+- 搜索结果会被缓存 5 分钟，提高重复搜索的响应速度
+- 缓存键基于搜索参数、用户类型和用户信息生成
+- 文件操作（上传、删除、重命名等）会自动清理相关的搜索缓存
+- 搜索缓存支持按挂载点和用户维度进行清理
+- 管理员可以通过 `/api/admin/cache/stats` 查看搜索缓存统计信息

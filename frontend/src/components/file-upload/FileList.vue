@@ -54,7 +54,7 @@
                   <svg
                       xmlns="http://www.w3.org/2000/svg"
                       class="h-5 w-5"
-                      :class="getFileIconClass(file.mimetype, file.filename)"
+                      :class="getFileIconClassLocal(file.mimetype, file.filename)"
                       fill="none"
                       viewBox="0 0 24 24"
                       stroke="currentColor"
@@ -211,7 +211,7 @@
                   <svg
                       xmlns="http://www.w3.org/2000/svg"
                       class="h-6 w-6"
-                      :class="getFileIconClass(file.mimetype, file.filename)"
+                      :class="getFileIconClassLocal(file.mimetype, file.filename)"
                       fill="none"
                       viewBox="0 0 24 24"
                       stroke="currentColor"
@@ -375,8 +375,8 @@
         </div>
         <div class="flex flex-col items-center">
           <div class="bg-white p-3 rounded-md shadow-md mb-3">
-            <img v-if="qrCodeUrl" :src="qrCodeUrl" :alt="t('file.fileQrCode')" class="w-48 h-48" />
-            <div v-else class="w-48 h-48 flex items-center justify-center">
+            <img v-if="qrCodeUrl" :src="qrCodeUrl" :alt="t('file.fileQrCode')" class="w-60 h-60" />
+            <div v-else class="w-60 h-60 flex items-center justify-center">
               <svg class="animate-spin h-8 w-8" :class="darkMode ? 'text-gray-400' : 'text-gray-600'" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                 <path
@@ -410,7 +410,7 @@
 import { ref, defineProps, defineEmits, watch, onUnmounted } from "vue";
 import { api } from "../../api";
 import { useI18n } from "vue-i18n";
-import * as MimeTypeUtils from "../../utils/mimeTypeUtils";
+import { formatMimeType as formatMimeTypeUtil } from "../../utils/mimeUtils";
 import { copyToClipboard } from "@/utils/clipboard";
 
 const { t } = useI18n();
@@ -436,16 +436,18 @@ const props = defineProps({
 
 const emit = defineEmits(["refresh"]);
 
+// 导入统一的工具函数
+import { getRemainingViews as getRemainingViewsUtil, formatFileSize } from "../../utils/fileUtils.js";
+import { getFileIconClass as getFileIconClassUtil } from "../../utils/mimeUtils.js";
+import QRCode from "qrcode";
+
 /**
  * 计算剩余可访问次数
  * @param {Object} file - 文件对象
  * @returns {string|number} 剩余访问次数或状态描述
  */
 const getRemainingViews = (file) => {
-  if (!file.max_views || file.max_views === 0) return t("file.unlimited");
-  const viewCount = file.views || 0;
-  const remaining = file.max_views - viewCount;
-  return remaining <= 0 ? t("file.usedUp") : remaining;
+  return getRemainingViewsUtil(file, t);
 };
 
 // 删除状态
@@ -570,25 +572,13 @@ const startMessageTimer = () => {
   }
 };
 
-// 格式化文件大小
-const formatFileSize = (bytes) => {
-  if (bytes === 0) return "0 Bytes";
-
-  const k = 1024;
-  const sizes = ["Bytes", "KB", "MB", "GB", "TB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
-};
-
 // 格式化MIME类型
 const formatMimeType = (mimetype, filename) => {
-  return MimeTypeUtils.formatMimeType(mimetype, filename);
+  return formatMimeTypeUtil(mimetype, filename);
 };
 
-// 根据MIME类型返回文件图标颜色
-const getFileIconClass = (mimetype, filename) => {
-  return MimeTypeUtils.getFileIconClass(mimetype, props.darkMode, filename);
+const getFileIconClassLocal = (mimetype, filename) => {
+  return getFileIconClassUtil(mimetype, filename, props.darkMode);
 };
 
 // 导入统一的时间处理工具
@@ -625,11 +615,21 @@ const closeQRCode = () => {
 };
 
 // 生成二维码
-const generateQRCode = (url) => {
-  // 使用QR Code API生成二维码
-  // 这里使用QRServer.com的免费API
-  const apiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(url)}`;
-  qrCodeUrl.value = apiUrl;
+const generateQRCode = async (url) => {
+  try {
+    // 使用qrcode库生成二维码
+    const dataURL = await QRCode.toDataURL(url, {
+      width: 300,
+      margin: 2,
+      color: {
+        dark: props.darkMode ? "#ffffff" : "#000000",
+        light: props.darkMode ? "#000000" : "#ffffff",
+      },
+    });
+    qrCodeUrl.value = dataURL;
+  } catch (error) {
+    console.error("生成二维码失败:", error);
+  }
 };
 
 // 下载二维码
@@ -639,7 +639,7 @@ const downloadQRCode = () => {
   // 创建一个链接元素
   const a = document.createElement("a");
   a.href = qrCodeUrl.value;
-  a.download = `qrcode-${Date.now()}.png`;
+  a.download = `cloudpaste-file-qrcode-${Date.now()}.png`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);

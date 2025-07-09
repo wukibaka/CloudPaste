@@ -10,39 +10,39 @@ import { showPageUnavailableToast } from "../utils/offlineToast.js";
 // 懒加载组件 - 添加离线错误处理
 const createOfflineAwareImport = (importFn, componentName = "页面") => {
   return () =>
-      importFn().catch((error) => {
-        console.error("组件加载失败:", error);
+    importFn().catch((error) => {
+      console.error("组件加载失败:", error);
 
-        // 如果是离线状态且加载失败，显示离线回退页面和Toast提示
-        if (pwaState.isOffline || !navigator.onLine) {
-          console.log("[离线模式] 组件未缓存，显示离线回退页面");
+      // 如果是离线状态且加载失败，显示离线回退页面和Toast提示
+      if (pwaState.isOffline || !navigator.onLine) {
+        console.log("[离线模式] 组件未缓存，显示离线回退页面");
 
-          // 显示Toast提示
-          setTimeout(() => {
-            showPageUnavailableToast(componentName);
-          }, 100);
+        // 显示Toast提示
+        setTimeout(() => {
+          showPageUnavailableToast(componentName);
+        }, 100);
 
-          return OfflineFallback;
-        }
+        return OfflineFallback;
+      }
 
-        // 在线状态下的加载失败，重新抛出错误
-        throw error;
-      });
+      // 在线状态下的加载失败，重新抛出错误
+      throw error;
+    });
 };
 
-const MarkdownEditor = createOfflineAwareImport(() => import("../components/MarkdownEditor.vue"), "首页");
-const FileUploadPage = createOfflineAwareImport(() => import("../components/FileUpload.vue"), "文件上传页面");
-const AdminPage = createOfflineAwareImport(() => import("../components/adminManagement/AdminPage.vue"), "管理面板");
-const PasteView = createOfflineAwareImport(() => import("../components/PasteView.vue"), "文本分享页面");
-const FileView = createOfflineAwareImport(() => import("../components/FileView.vue"), "文件预览页面");
-const MountExplorer = createOfflineAwareImport(() => import("../components/MountExplorer.vue"), "挂载浏览器");
+const HomeView = createOfflineAwareImport(() => import("../views/MarkdownEditorView.vue"), "首页");
+const UploadView = createOfflineAwareImport(() => import("../views/UploadView.vue"), "文件上传页面");
+const AdminView = createOfflineAwareImport(() => import("../views/AdminView.vue"), "管理面板");
+const PasteView = createOfflineAwareImport(() => import("../views/PasteView.vue"), "文本分享页面");
+const FileView = createOfflineAwareImport(() => import("../views/FileView.vue"), "文件预览页面");
+const MountExplorerView = createOfflineAwareImport(() => import("../views/MountExplorerView.vue"), "挂载浏览器");
 
 // 路由配置 - 完全对应原有的页面逻辑
 const routes = [
   {
     path: "/",
     name: "Home",
-    component: MarkdownEditor,
+    component: HomeView,
     meta: {
       title: "CloudPaste - 在线剪贴板",
       originalPage: "home",
@@ -51,7 +51,7 @@ const routes = [
   {
     path: "/upload",
     name: "Upload",
-    component: FileUploadPage,
+    component: UploadView,
     meta: {
       title: "文件上传 - CloudPaste",
       originalPage: "upload",
@@ -60,7 +60,7 @@ const routes = [
   {
     path: "/admin",
     name: "Admin",
-    component: AdminPage,
+    component: AdminView,
     props: (route) => ({
       activeModule: route.params.module || "dashboard",
     }),
@@ -73,7 +73,7 @@ const routes = [
   {
     path: "/admin/:module",
     name: "AdminModule",
-    component: AdminPage,
+    component: AdminView,
     props: (route) => ({
       activeModule: route.params.module,
     }),
@@ -106,10 +106,9 @@ const routes = [
   {
     path: "/mount-explorer",
     name: "MountExplorer",
-    component: MountExplorer,
+    component: MountExplorerView,
     props: (route) => ({
-      pathMatch: "",
-      previewFile: route.query.preview || null,
+      darkMode: route.meta.darkMode || false,
     }),
     meta: {
       title: "挂载浏览 - CloudPaste",
@@ -117,12 +116,11 @@ const routes = [
     },
   },
   {
-    path: "/mount-explorer/:pathMatch(.*)*",
+    path: "/mount-explorer/:pathMatch(.*)+",
     name: "MountExplorerPath",
-    component: MountExplorer,
+    component: MountExplorerView,
     props: (route) => ({
-      pathMatch: route.params.pathMatch,
-      previewFile: route.query.preview || null,
+      darkMode: route.meta.darkMode || false,
     }),
     meta: {
       title: "挂载浏览 - CloudPaste",
@@ -153,32 +151,77 @@ const router = createRouter({
   },
 });
 
-// 路由守卫 - 保持原有的权限检查逻辑
+// 路由守卫 - 使用认证Store进行主动权限验证
 router.beforeEach(async (to, from, next) => {
-  // 管理页面权限检查 - 检查所有管理相关路由
-  if (to.meta.requiresAuth && (to.name === "Admin" || to.name === "AdminModule")) {
-    const adminToken = localStorage.getItem("admin_token");
-    if (adminToken) {
-      // 验证 token 有效性 - 保持原有验证逻辑
-      try {
-        const { fetchApi } = await import("../api/client.js");
-        await fetchApi("test/admin-token", {
-          method: "GET",
-          headers: {
-            Authorization: `Bearer ${adminToken}`,
-          },
-        });
-        console.log("管理员令牌验证成功");
-      } catch (error) {
-        console.error("管理员令牌验证失败:", error);
-        localStorage.removeItem("admin_token");
-        // 保持在管理页面，但会显示登录表单 - 与原有逻辑一致
-        window.dispatchEvent(new CustomEvent("admin-token-expired"));
+  try {
+    // 动态导入认证Store
+    const { useAuthStore } = await import("../stores/authStore.js");
+    const authStore = useAuthStore();
+
+    // 如果需要认证且认证状态需要重新验证，则进行验证
+    if (to.meta.requiresAuth && authStore.needsRevalidation) {
+      console.log("路由守卫：需要重新验证认证状态");
+      await authStore.validateAuth();
+    }
+
+    // 管理页面权限检查
+    if (to.meta.requiresAuth && (to.name === "Admin" || to.name === "AdminModule")) {
+      if (!authStore.isAuthenticated) {
+        console.log("路由守卫：用户未认证，允许访问管理页面但会显示登录表单");
+        // 允许访问但会显示登录表单，保持原有逻辑
+        next();
+        return;
+      }
+
+      // 检查是否有管理权限（管理员或有权限的API密钥用户）
+      const hasManagementAccess =
+        authStore.isAdmin || (authStore.authType === "apikey" && (authStore.hasTextPermission || authStore.hasFilePermission || authStore.hasMountPermission));
+
+      if (!hasManagementAccess) {
+        console.log("路由守卫：用户无管理权限，重定向到首页");
+        next({ name: "Home" });
+        return;
+      }
+
+      console.log("路由守卫：管理权限验证通过", {
+        isAdmin: authStore.isAdmin,
+        authType: authStore.authType,
+        hasTextPermission: authStore.hasTextPermission,
+        hasFilePermission: authStore.hasFilePermission,
+        hasMountPermission: authStore.hasMountPermission,
+      });
+    }
+
+    // 挂载浏览器页面权限检查
+    if (to.name === "MountExplorer" || to.name === "MountExplorerPath") {
+      // 移除自动重定向逻辑，让组件自己处理权限显示
+      // 这样用户可以看到友好的"无权限"提示而不是突然被重定向
+
+      console.log("路由守卫：挂载页面访问", {
+        isAuthenticated: authStore.isAuthenticated,
+        hasMountPermission: authStore.hasMountPermission,
+        authType: authStore.authType,
+      });
+
+      // 只对有挂载权限的API密钥用户进行路径权限检查
+      if (authStore.authType === "apikey" && authStore.hasMountPermission && to.params.pathMatch) {
+        const requestedPath = "/" + (Array.isArray(to.params.pathMatch) ? to.params.pathMatch.join("/") : to.params.pathMatch);
+        if (!authStore.hasPathPermission(requestedPath)) {
+          console.log("路由守卫：用户无此路径权限，重定向到基本路径");
+          const basePath = authStore.userInfo.basicPath || "/";
+          const redirectPath = basePath === "/" ? "/mount-explorer" : `/mount-explorer${basePath}`;
+          next({ path: redirectPath });
+          return;
+        }
       }
     }
-  }
 
-  next();
+    next();
+  } catch (error) {
+    console.error("路由守卫错误:", error);
+    // 发生错误时允许继续，避免阻塞路由
+    next();
+  }
 });
 
 // 路由错误处理
@@ -266,9 +309,14 @@ router.afterEach(async (to, from) => {
   const toPage = to.meta?.originalPage || "unknown";
   console.log(`页面从 ${fromPage} 切换到 ${toPage}`);
 
-  const adminToken = localStorage.getItem("admin_token");
-  const apiKey = localStorage.getItem("api_key");
-  console.log(`页面切换后权限状态: adminToken=${adminToken ? "存在" : "不存在"}, apiKey=${apiKey ? "存在" : "不存在"}`);
+  // 使用认证Store获取权限状态
+  try {
+    const { useAuthStore } = await import("../stores/authStore.js");
+    const authStore = useAuthStore();
+    console.log(`页面切换后权限状态: 认证类型=${authStore.authType}, 已认证=${authStore.isAuthenticated}, 管理员=${authStore.isAdmin}`);
+  } catch (error) {
+    console.warn("无法获取认证状态:", error);
+  }
 
   // 保持原有的路径日志
   console.log("路径变化检测:", to.path);

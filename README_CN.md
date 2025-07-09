@@ -2,7 +2,10 @@
 
 <div align="center">
     <p>
-    <a href="README_CN.md">中文</a> | <a href="README.md">English</a>
+    <a href="README_CN.md">中文</a> | <a href="README.md">English</a> |
+    <a href="https://www.readme-i18n.com/ling-drag0n/CloudPaste?lang=es">Español</a> | 
+    <a href="https://www.readme-i18n.com/ling-drag0n/CloudPaste?lang=fr">français</a> | 
+    <a href="https://www.readme-i18n.com/ling-drag0n/CloudPaste?lang=ja">日本語</a> 
     </p>
     <img width="100" height="100" src="https://img.icons8.com/dusk/100/paste.png" alt="paste"/>
     <h3>基于 Cloudflare 的在线剪贴板和文件分享服务，支持 Markdown 编辑和文件上传</h3>
@@ -1046,6 +1049,12 @@ Apache License 2.0
 
   <a href="https://afdian.com/a/drag0n"><img width="200" src="https://pic1.afdiancdn.com/static/img/welcome/button-sponsorme.png" alt=""></a>
 
+- **赞助者**：非常感谢以下赞助者对本项目的支持！！
+
+   [![赞助者](https://afdian.730888.xyz/image)](https://afdian.com/a/drag0n)
+
+- **Contributors**：感谢以下贡献者对本项目的无私贡献！
+  [![Contributors](https://contrib.rocks/image?repo=ling-drag0n/CloudPaste)](https://github.com/ling-drag0n/CloudPaste/graphs/contributors)
 
 ## Star History
 

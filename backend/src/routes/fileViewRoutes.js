@@ -1,6 +1,10 @@
-import { DbTables } from "../constants/index.js";
+import { Hono } from "hono";
+import { RepositoryFactory } from "../repositories/index.js";
 import { verifyPassword } from "../utils/crypto.js";
 import { generatePresignedUrl, deleteFileFromS3 } from "../utils/s3Utils.js";
+import { DbTables } from "../constants/index.js";
+
+const app = new Hono();
 import {
   getMimeTypeGroup,
   MIME_GROUPS,
@@ -23,20 +27,19 @@ import {
  * @returns {Promise<Object|null>} 文件信息或null
  */
 async function getFileBySlug(db, slug, includePassword = true) {
-  const fields = includePassword
-      ? "f.id, f.filename, f.storage_path, f.s3_url, f.mimetype, f.size, f.remark, f.password, f.max_views, f.views, f.expires_at, f.created_at, f.s3_config_id, f.created_by, f.use_proxy, f.slug"
-      : "f.id, f.filename, f.storage_path, f.s3_url, f.mimetype, f.size, f.remark, f.max_views, f.views, f.expires_at, f.created_at, f.s3_config_id, f.created_by, f.use_proxy, f.slug";
+  // 使用 FileRepository 获取文件信息
+  const repositoryFactory = new RepositoryFactory(db);
+  const fileRepository = repositoryFactory.getFileRepository();
 
-  return await db
-      .prepare(
-          `
-      SELECT ${fields}
-      FROM ${DbTables.FILES} f
-      WHERE f.slug = ?
-    `
-      )
-      .bind(slug)
-      .first();
+  const file = await fileRepository.findBySlug(slug);
+
+  // 如果不需要密码字段，移除密码字段
+  if (!includePassword && file) {
+    const { password, ...fileWithoutPassword } = file;
+    return fileWithoutPassword;
+  }
+
+  return file;
 }
 
 /**
@@ -97,9 +100,12 @@ async function checkAndDeleteExpiredFile(db, file, encryptionSecret) {
 
     // 如果已过期，尝试删除
     if (isExpired) {
-      // 如果有S3配置，尝试从S3删除
-      if (file.s3_config_id && file.storage_path) {
-        const s3Config = await db.prepare(`SELECT * FROM ${DbTables.S3_CONFIGS} WHERE id = ?`).bind(file.s3_config_id).first();
+      // 如果是S3存储类型，尝试从S3删除
+      if (file.storage_type === "S3" && file.storage_config_id && file.storage_path) {
+        const repositoryFactory = new RepositoryFactory(db);
+        const s3ConfigRepository = repositoryFactory.getS3ConfigRepository();
+
+        const s3Config = (await s3ConfigRepository.findByIdAndAdminWithSecrets(file.storage_config_id, null)) || (await s3ConfigRepository.findById(file.storage_config_id));
         if (s3Config) {
           try {
             await deleteFileFromS3(s3Config, file.storage_path, encryptionSecret);
@@ -110,8 +116,10 @@ async function checkAndDeleteExpiredFile(db, file, encryptionSecret) {
         }
       }
 
-      // 从数据库删除文件记录
-      await db.prepare(`DELETE FROM ${DbTables.FILES} WHERE id = ?`).bind(file.id).run();
+      // 使用 FileRepository 从数据库删除文件记录
+      const repositoryFactory = new RepositoryFactory(db);
+      const fileRepository = repositoryFactory.getFileRepository();
+      await fileRepository.deleteFile(file.id);
 
       console.log(`文件(${file.id})已过期或超过最大查看次数，已删除`);
       return true;
@@ -132,23 +140,14 @@ async function checkAndDeleteExpiredFile(db, file, encryptionSecret) {
  * @returns {Promise<Object>} 包含更新后的文件信息和状态
  */
 async function incrementAndCheckFileViews(db, file, encryptionSecret) {
-  // 首先递增访问计数
-  await db.prepare(`UPDATE ${DbTables.FILES} SET views = views + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).bind(file.id).run();
+  // 使用 FileRepository 递增访问计数
+  const repositoryFactory = new RepositoryFactory(db);
+  const fileRepository = repositoryFactory.getFileRepository();
 
-  // 重新获取更新后的文件信息
-  const updatedFile = await db
-      .prepare(
-          `
-      SELECT 
-        f.id, f.filename, f.storage_path, f.s3_url, f.mimetype, f.size, 
-        f.remark, f.password, f.max_views, f.views, f.created_by,
-        f.expires_at, f.created_at, f.s3_config_id, f.use_proxy, f.slug
-      FROM ${DbTables.FILES} f
-      WHERE f.id = ?
-    `
-      )
-      .bind(file.id)
-      .first();
+  await fileRepository.incrementViews(file.id);
+
+  // 重新获取更新后的文件信息（包含存储配置）
+  const updatedFile = await fileRepository.findByIdWithStorageConfig(file.id);
 
   // 检查是否超过最大访问次数
   if (updatedFile.max_views && updatedFile.max_views > 0 && updatedFile.views > updatedFile.max_views) {
@@ -223,8 +222,11 @@ async function handleFileDownload(slug, env, request, forceDownload = false) {
       // 这里已经在incrementAndCheckFileViews函数中尝试删除了文件，但为确保删除成功，再次检查文件是否还存在
       console.log(`文件(${file.id})已达到最大查看次数，准备删除...`);
       try {
-        // 再次检查文件是否被成功删除，如果没有则再次尝试删除
-        const fileStillExists = await db.prepare(`SELECT id FROM ${DbTables.FILES} WHERE id = ?`).bind(file.id).first();
+        // 使用 FileRepository 再次检查文件是否被成功删除
+        const repositoryFactory = new RepositoryFactory(db);
+        const fileRepository = repositoryFactory.getFileRepository();
+
+        const fileStillExists = await fileRepository.findById(file.id);
         if (fileStillExists) {
           console.log(`文件(${file.id})仍然存在，再次尝试删除...`);
           await checkAndDeleteExpiredFile(db, result.file, encryptionSecret);
@@ -235,13 +237,20 @@ async function handleFileDownload(slug, env, request, forceDownload = false) {
       return new Response("文件已达到最大查看次数", { status: 410 });
     }
 
-    // 如果没有S3配置或存储路径，则返回404
-    if (!result.file.s3_config_id || !result.file.storage_path) {
+    // 检查文件存储信息
+    if (!result.file.storage_config_id || !result.file.storage_path || !result.file.storage_type) {
       return new Response("文件存储信息不完整", { status: 404 });
     }
 
+    // 根据存储类型获取配置
+    if (result.file.storage_type !== "S3") {
+      return new Response("暂不支持此存储类型的预览", { status: 501 });
+    }
+
     // 获取S3配置
-    const s3Config = await db.prepare(`SELECT * FROM ${DbTables.S3_CONFIGS} WHERE id = ?`).bind(result.file.s3_config_id).first();
+    const repositoryFactory = new RepositoryFactory(db);
+    const s3ConfigRepository = repositoryFactory.getS3ConfigRepository();
+    const s3Config = await s3ConfigRepository.findById(result.file.storage_config_id);
     if (!s3Config) {
       return new Response("无法获取存储配置信息", { status: 500 });
     }
@@ -381,111 +390,114 @@ async function handleFileDownload(slug, env, request, forceDownload = false) {
   }
 }
 
-/**
- * 注册文件查看/下载路由
- * @param {Object} app - Hono应用实例
- */
-export function registerFileViewRoutes(app) {
-  // 处理API路径下的文件下载请求 /api/file-download/:slug
-  app.get("/api/file-download/:slug", async (c) => {
-    const slug = c.req.param("slug");
-    return await handleFileDownload(slug, c.env, c.req.raw, true); // 强制下载
-  });
+// 处理API路径下的文件下载请求 /api/file-download/:slug
+app.get("/api/file-download/:slug", async (c) => {
+  const slug = c.req.param("slug");
+  return await handleFileDownload(slug, c.env, c.req.raw, true); // 强制下载
+});
 
-  // 处理API路径下的文件预览请求 /api/file-view/:slug
-  app.get("/api/file-view/:slug", async (c) => {
-    const slug = c.req.param("slug");
-    return await handleFileDownload(slug, c.env, c.req.raw, false); // 预览
-  });
+// 处理API路径下的文件预览请求 /api/file-view/:slug
+app.get("/api/file-view/:slug", async (c) => {
+  const slug = c.req.param("slug");
+  return await handleFileDownload(slug, c.env, c.req.raw, false); // 预览
+});
 
-  // 处理Office文件直接预览URL请求 /api/office-preview/:slug
-  app.get("/api/office-preview/:slug", async (c) => {
-    const slug = c.req.param("slug");
-    const db = c.env.DB;
-    const encryptionSecret = c.env.ENCRYPTION_SECRET || "default-encryption-key";
+// 处理Office文件直接预览URL请求 /api/office-preview/:slug
+app.get("/api/office-preview/:slug", async (c) => {
+  const slug = c.req.param("slug");
+  const db = c.env.DB;
+  const encryptionSecret = c.env.ENCRYPTION_SECRET || "default-encryption-key";
+
+  try {
+    // 查询文件详情
+    const file = await getFileBySlug(db, slug);
+
+    // 检查文件是否存在
+    if (!file) {
+      return c.json({ error: "文件不存在" }, 404);
+    }
+
+    // 检查文件是否受密码保护
+    if (file.password) {
+      // 如果有密码，检查URL中是否包含密码参数
+      const url = new URL(c.req.url);
+      const passwordParam = url.searchParams.get("password");
+
+      if (!passwordParam) {
+        return c.json({ error: "需要密码访问此文件" }, 401);
+      }
+
+      // 验证密码
+      const passwordValid = await verifyPassword(passwordParam, file.password);
+      if (!passwordValid) {
+        return c.json({ error: "密码错误" }, 403);
+      }
+    }
+
+    // 检查文件是否可访问
+    const accessCheck = await isFileAccessible(db, file, encryptionSecret);
+    if (!accessCheck.accessible) {
+      if (accessCheck.reason === "expired") {
+        return c.json({ error: "文件已过期" }, 410);
+      }
+      return c.json({ error: "文件不可访问" }, 403);
+    }
+
+    // 检查文件是否为Office文件
+    const isOffice = isOfficeFile(file.mimetype, file.filename);
+    if (!isOffice) {
+      return c.json({ error: "不是Office文件类型" }, 400);
+    }
+
+    // 检查文件存储信息
+    if (!file.storage_config_id || !file.storage_path || !file.storage_type) {
+      return c.json({ error: "文件存储信息不完整" }, 404);
+    }
+
+    // 检查存储类型
+    if (file.storage_type !== "S3") {
+      return c.json({ error: "暂不支持此存储类型的Office预览" }, 501);
+    }
+
+    // 获取S3配置
+    const repositoryFactory = new RepositoryFactory(db);
+    const s3ConfigRepository = repositoryFactory.getS3ConfigRepository();
+    const s3Config = await s3ConfigRepository.findById(file.storage_config_id);
+    if (!s3Config) {
+      return c.json({ error: "无法获取存储配置信息" }, 500);
+    }
+
+    // 计算访问次数（暂不增加计数器，因为这只是获取URL）
+    // 但需要考虑已有的访问次数
+    if (file.max_views && file.max_views > 0 && file.views >= file.max_views) {
+      return c.json({ error: "文件已达到最大查看次数" }, 410);
+    }
 
     try {
-      // 查询文件详情
-      const file = await getFileBySlug(db, slug);
+      // Office预览使用S3配置的默认时效
+      // 生成临时预签名URL，适用于Office预览
+      // 注意：Office预览没有用户上下文，禁用缓存避免权限泄露
+      const presignedUrl = await generatePresignedUrl(s3Config, file.storage_path, encryptionSecret, null, false, file.mimetype, { enableCache: false });
 
-      // 检查文件是否存在
-      if (!file) {
-        return c.json({ error: "文件不存在" }, 404);
-      }
-
-      // 检查文件是否受密码保护
-      if (file.password) {
-        // 如果有密码，检查URL中是否包含密码参数
-        const url = new URL(c.req.url);
-        const passwordParam = url.searchParams.get("password");
-
-        if (!passwordParam) {
-          return c.json({ error: "需要密码访问此文件" }, 401);
-        }
-
-        // 验证密码
-        const passwordValid = await verifyPassword(passwordParam, file.password);
-        if (!passwordValid) {
-          return c.json({ error: "密码错误" }, 403);
-        }
-      }
-
-      // 检查文件是否可访问
-      const accessCheck = await isFileAccessible(db, file, encryptionSecret);
-      if (!accessCheck.accessible) {
-        if (accessCheck.reason === "expired") {
-          return c.json({ error: "文件已过期" }, 410);
-        }
-        return c.json({ error: "文件不可访问" }, 403);
-      }
-
-      // 检查文件是否为Office文件
-      const isOffice = isOfficeFile(file.mimetype, file.filename);
-      if (!isOffice) {
-        return c.json({ error: "不是Office文件类型" }, 400);
-      }
-
-      // 如果没有S3配置或存储路径，则返回404
-      if (!file.s3_config_id || !file.storage_path) {
-        return c.json({ error: "文件存储信息不完整" }, 404);
-      }
-
-      // 获取S3配置
-      const s3Config = await db.prepare(`SELECT * FROM ${DbTables.S3_CONFIGS} WHERE id = ?`).bind(file.s3_config_id).first();
-      if (!s3Config) {
-        return c.json({ error: "无法获取存储配置信息" }, 500);
-      }
-
-      // 计算访问次数（暂不增加计数器，因为这只是获取URL）
-      // 但需要考虑已有的访问次数
-      if (file.max_views && file.max_views > 0 && file.views >= file.max_views) {
-        return c.json({ error: "文件已达到最大查看次数" }, 410);
-      }
-
-      try {
-        // Office预览使用S3配置的默认时效
-        // 生成临时预签名URL，适用于Office预览
-        // 注意：Office预览没有用户上下文，禁用缓存避免权限泄露
-        const presignedUrl = await generatePresignedUrl(s3Config, file.storage_path, encryptionSecret, null, false, file.mimetype, { enableCache: false });
-
-        // 返回直接访问URL
-        return c.json({
-          url: presignedUrl,
-          filename: file.filename,
-          mimetype: file.mimetype,
-          expires_in: s3Config.signature_expires_in || 3600,
-          is_temporary: true,
-        });
-      } catch (error) {
-        console.error("生成Office预览URL出错:", error);
-        return c.json({ error: "生成预览URL失败: " + error.message }, 500);
-      }
+      // 返回直接访问URL
+      return c.json({
+        url: presignedUrl,
+        filename: file.filename,
+        mimetype: file.mimetype,
+        expires_in: s3Config.signature_expires_in || 3600,
+        is_temporary: true,
+      });
     } catch (error) {
-      console.error("处理Office预览URL请求错误:", error);
-      return c.json({ error: "服务器处理错误: " + error.message }, 500);
+      console.error("生成Office预览URL出错:", error);
+      return c.json({ error: "生成预览URL失败: " + error.message }, 500);
     }
-  });
-}
+  } catch (error) {
+    console.error("处理Office预览URL请求错误:", error);
+    return c.json({ error: "服务器处理错误: " + error.message }, 500);
+  }
+});
 
 // 导出handleFileDownload函数和checkAndDeleteExpiredFile函数
 export { handleFileDownload, checkAndDeleteExpiredFile };
+
+export default app;

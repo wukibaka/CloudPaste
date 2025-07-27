@@ -79,7 +79,7 @@ export async function initDatabase(db) {
     )
     .run();
 
-  // 创建api_keys表 - 存储API密钥
+  // 创建api_keys表 - 存储API密钥（位标志权限系统）
   await db
     .prepare(
       `
@@ -87,10 +87,10 @@ export async function initDatabase(db) {
         id TEXT PRIMARY KEY,
         name TEXT UNIQUE NOT NULL,
         key TEXT UNIQUE NOT NULL,
-        text_permission BOOLEAN DEFAULT 0,
-        file_permission BOOLEAN DEFAULT 0,
-        mount_permission BOOLEAN DEFAULT 0,
+        permissions INTEGER DEFAULT 0,
+        role TEXT DEFAULT 'GENERAL',
         basic_path TEXT DEFAULT '/',
+        is_guest BOOLEAN DEFAULT 0,
         last_used DATETIME,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         expires_at DATETIME NOT NULL
@@ -129,30 +129,38 @@ export async function initDatabase(db) {
     )
     .run();
 
-  // 创建files表 - 存储已上传文件的元数据
+  // 创建files表 - 存储已上传文件的元数据（支持多存储类型）
   await db
     .prepare(
       `
       CREATE TABLE IF NOT EXISTS ${DbTables.FILES} (
         id TEXT PRIMARY KEY,
+        slug TEXT UNIQUE NOT NULL,
         filename TEXT NOT NULL,
+
+        -- 存储引用（支持多存储类型）
+        storage_config_id TEXT NOT NULL,
+        storage_type TEXT NOT NULL,
         storage_path TEXT NOT NULL,
-        s3_url TEXT,
+        file_path TEXT,
+
+        -- 文件元数据
         mimetype TEXT NOT NULL,
         size INTEGER NOT NULL,
-        s3_config_id TEXT NOT NULL,
-        slug TEXT UNIQUE NOT NULL,
+        etag TEXT,
+
+        -- 分享控制（保持现有功能）
         remark TEXT,
         password TEXT,
         expires_at DATETIME,
         max_views INTEGER,
         views INTEGER DEFAULT 0,
         use_proxy BOOLEAN DEFAULT 1,
-        etag TEXT,
+
+        -- 元数据
         created_by TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (s3_config_id) REFERENCES ${DbTables.S3_CONFIGS}(id) ON DELETE CASCADE
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )
     `
     )
@@ -160,7 +168,9 @@ export async function initDatabase(db) {
 
   // 创建files表索引
   await db.prepare(`CREATE INDEX IF NOT EXISTS idx_files_slug ON ${DbTables.FILES}(slug)`).run();
-  await db.prepare(`CREATE INDEX IF NOT EXISTS idx_files_s3_config_id ON ${DbTables.FILES}(s3_config_id)`).run();
+  await db.prepare(`CREATE INDEX IF NOT EXISTS idx_files_storage_config_id ON ${DbTables.FILES}(storage_config_id)`).run();
+  await db.prepare(`CREATE INDEX IF NOT EXISTS idx_files_storage_type ON ${DbTables.FILES}(storage_type)`).run();
+  await db.prepare(`CREATE INDEX IF NOT EXISTS idx_files_file_path ON ${DbTables.FILES}(file_path)`).run();
   await db.prepare(`CREATE INDEX IF NOT EXISTS idx_files_created_at ON ${DbTables.FILES}(created_at)`).run();
   await db.prepare(`CREATE INDEX IF NOT EXISTS idx_files_expires_at ON ${DbTables.FILES}(expires_at)`).run();
 
@@ -209,6 +219,10 @@ export async function initDatabase(db) {
         created_by TEXT NOT NULL,
         sort_order INTEGER DEFAULT 0,
         cache_ttl INTEGER DEFAULT 300,
+        web_proxy BOOLEAN DEFAULT 0,
+        webdav_policy TEXT DEFAULT '302_redirect',
+        enable_sign BOOLEAN DEFAULT 0,
+        sign_expires INTEGER DEFAULT NULL,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         last_used DATETIME
@@ -241,6 +255,72 @@ export async function initDatabase(db) {
         `
         INSERT INTO ${DbTables.SYSTEM_SETTINGS} (key, value, description)
         VALUES ('max_upload_size', '100', '单次最大上传文件大小限制(MB)')
+      `
+      )
+      .run();
+  }
+
+  // 检查是否已存在WebDAV上传模式设置
+  const webdavUploadMode = await db
+    .prepare(
+      `
+      SELECT value FROM ${DbTables.SYSTEM_SETTINGS}
+      WHERE key = 'webdav_upload_mode'
+    `
+    )
+    .first();
+
+  // 如果不存在，添加默认值
+  if (!webdavUploadMode) {
+    await db
+      .prepare(
+        `
+        INSERT INTO ${DbTables.SYSTEM_SETTINGS} (key, value, description)
+        VALUES ('webdav_upload_mode', 'direct', 'WebDAV上传模式（multipart, direct）')
+      `
+      )
+      .run();
+  }
+
+  // 检查是否已存在代理签名全局设置
+  const proxySignAll = await db
+    .prepare(
+      `
+      SELECT value FROM ${DbTables.SYSTEM_SETTINGS}
+      WHERE key = 'proxy_sign_all'
+    `
+    )
+    .first();
+
+  // 如果不存在，添加默认值
+  if (!proxySignAll) {
+    await db
+      .prepare(
+        `
+        INSERT INTO ${DbTables.SYSTEM_SETTINGS} (key, value, description)
+        VALUES ('proxy_sign_all', 'true', '签名所有：开启后所有代理访问都需要签名')
+      `
+      )
+      .run();
+  }
+
+  // 检查是否已存在代理签名过期时间设置
+  const proxySignExpires = await db
+    .prepare(
+      `
+      SELECT value FROM ${DbTables.SYSTEM_SETTINGS}
+      WHERE key = 'proxy_sign_expires'
+    `
+    )
+    .first();
+
+  // 如果不存在，添加默认值
+  if (!proxySignExpires) {
+    await db
+      .prepare(
+        `
+        INSERT INTO ${DbTables.SYSTEM_SETTINGS} (key, value, description)
+        VALUES ('proxy_sign_expires', '0', '全局签名过期时间（秒），0表示永不过期')
       `
       )
       .run();
@@ -435,6 +515,417 @@ async function migrateDatabase(db, currentVersion, targetVersion) {
           // 不抛出错误，允许迁移继续进行
         }
         break;
+
+      case 8:
+        // 版本8：为storage_mounts表添加web_proxy和webdav_policy字段
+        try {
+          console.log(`为${DbTables.STORAGE_MOUNTS}表添加web_proxy和webdav_policy字段...`);
+
+          // 检查web_proxy字段是否存在
+          const columnInfo = await db.prepare(`PRAGMA table_info(${DbTables.STORAGE_MOUNTS})`).all();
+          const webProxyExists = columnInfo.results.some((column) => column.name === "web_proxy");
+          const webdavPolicyExists = columnInfo.results.some((column) => column.name === "webdav_policy");
+
+          if (!webProxyExists) {
+            try {
+              await db.prepare(`ALTER TABLE ${DbTables.STORAGE_MOUNTS} ADD COLUMN web_proxy BOOLEAN DEFAULT 0`).run();
+              console.log(`成功添加web_proxy字段到${DbTables.STORAGE_MOUNTS}表`);
+            } catch (alterError) {
+              console.error(`无法添加web_proxy字段到${DbTables.STORAGE_MOUNTS}表:`, alterError);
+              console.log(`将继续执行迁移过程，但请手动检查${DbTables.STORAGE_MOUNTS}表结构`);
+            }
+          } else {
+            console.log(`${DbTables.STORAGE_MOUNTS}表已存在web_proxy字段，跳过添加`);
+          }
+
+          if (!webdavPolicyExists) {
+            try {
+              await db.prepare(`ALTER TABLE ${DbTables.STORAGE_MOUNTS} ADD COLUMN webdav_policy TEXT DEFAULT '302_redirect'`).run();
+              console.log(`成功添加webdav_policy字段到${DbTables.STORAGE_MOUNTS}表`);
+            } catch (alterError) {
+              console.error(`无法添加webdav_policy字段到${DbTables.STORAGE_MOUNTS}表:`, alterError);
+              console.log(`将继续执行迁移过程，但请手动检查${DbTables.STORAGE_MOUNTS}表结构`);
+            }
+          } else {
+            console.log(`${DbTables.STORAGE_MOUNTS}表已存在webdav_policy字段，跳过添加`);
+          }
+        } catch (error) {
+          console.error(`版本8迁移失败:`, error);
+          console.log("将继续执行迁移过程，但请手动检查storage_mounts表结构");
+        }
+        break;
+
+      case 9:
+        // 版本9：为files表添加多存储类型支持字段
+        try {
+          console.log(`为${DbTables.FILES}表添加多存储类型支持字段...`);
+
+          // 检查字段是否已存在
+          const columnInfo = await db.prepare(`PRAGMA table_info(${DbTables.FILES})`).all();
+          const existingColumns = new Set(columnInfo.results.map((col) => col.name));
+
+          // 需要添加的字段
+          const fieldsToAdd = [
+            { name: "storage_config_id", sql: "storage_config_id TEXT" },
+            { name: "storage_type", sql: "storage_type TEXT" },
+            { name: "file_path", sql: "file_path TEXT" },
+          ];
+
+          // 添加缺失的字段
+          for (const field of fieldsToAdd) {
+            if (!existingColumns.has(field.name)) {
+              try {
+                await db.prepare(`ALTER TABLE ${DbTables.FILES} ADD COLUMN ${field.sql}`).run();
+                console.log(`成功添加${field.name}字段到${DbTables.FILES}表`);
+              } catch (alterError) {
+                console.error(`无法添加${field.name}字段到${DbTables.FILES}表:`, alterError);
+                console.log(`将继续执行迁移过程，但请手动检查${DbTables.FILES}表结构`);
+              }
+            } else {
+              console.log(`${DbTables.FILES}表已存在${field.name}字段，跳过添加`);
+            }
+          }
+
+          // 迁移现有数据：将s3_config_id的数据迁移到新字段
+          try {
+            console.log("开始迁移现有files表数据...");
+
+            // 更新所有有s3_config_id但没有storage_config_id的记录
+            const updateResult = await db
+              .prepare(
+                `
+              UPDATE ${DbTables.FILES}
+              SET storage_config_id = s3_config_id, storage_type = 'S3'
+              WHERE s3_config_id IS NOT NULL
+                AND (storage_config_id IS NULL OR storage_type IS NULL)
+            `
+              )
+              .run();
+
+            console.log(`成功迁移 ${updateResult.changes || 0} 条files记录`);
+
+            // 验证迁移结果
+            const unmigratedCount = await db
+              .prepare(
+                `
+              SELECT COUNT(*) as count
+              FROM ${DbTables.FILES}
+              WHERE s3_config_id IS NOT NULL
+                AND (storage_config_id IS NULL OR storage_type IS NULL)
+            `
+              )
+              .first();
+
+            if (unmigratedCount?.count > 0) {
+              console.warn(`还有 ${unmigratedCount.count} 条记录未完成迁移`);
+              console.log("由于存在未迁移记录，暂不删除s3_config_id字段");
+            } else {
+              console.log("所有files记录迁移完成");
+
+              // 数据迁移完成后，删除旧的s3_config_id字段
+              try {
+                console.log("开始删除旧的s3_config_id字段...");
+
+                // 创建新表结构（不包含s3_config_id字段）
+                await db
+                  .prepare(
+                    `
+                  CREATE TABLE ${DbTables.FILES}_new (
+                    id TEXT PRIMARY KEY,
+                    slug TEXT UNIQUE NOT NULL,
+                    filename TEXT NOT NULL,
+
+                    -- 存储引用（支持多存储类型）
+                    storage_config_id TEXT NOT NULL,
+                    storage_type TEXT NOT NULL,
+                    storage_path TEXT NOT NULL,
+                    file_path TEXT,
+
+                    -- 文件元数据
+                    mimetype TEXT NOT NULL,
+                    size INTEGER NOT NULL,
+                    etag TEXT,
+
+                    -- 分享控制（保持现有功能）
+                    remark TEXT,
+                    password TEXT,
+                    expires_at DATETIME,
+                    max_views INTEGER,
+                    views INTEGER DEFAULT 0,
+                    use_proxy BOOLEAN DEFAULT 1,
+
+                    -- 元数据
+                    created_by TEXT,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                  )
+                `
+                  )
+                  .run();
+
+                // 复制数据到新表
+                await db
+                  .prepare(
+                    `
+                  INSERT INTO ${DbTables.FILES}_new
+                  SELECT id, slug, filename, storage_config_id, storage_type, storage_path, file_path,
+                         mimetype, size, etag, remark, password, expires_at, max_views, views, use_proxy,
+                         created_by, created_at, updated_at
+                  FROM ${DbTables.FILES}
+                `
+                  )
+                  .run();
+
+                // 删除旧表
+                await db.prepare(`DROP TABLE ${DbTables.FILES}`).run();
+
+                // 重命名新表
+                await db.prepare(`ALTER TABLE ${DbTables.FILES}_new RENAME TO ${DbTables.FILES}`).run();
+
+                // 重新创建索引
+                await db.prepare(`CREATE INDEX IF NOT EXISTS idx_files_slug ON ${DbTables.FILES}(slug)`).run();
+                await db.prepare(`CREATE INDEX IF NOT EXISTS idx_files_storage_config_id ON ${DbTables.FILES}(storage_config_id)`).run();
+                await db.prepare(`CREATE INDEX IF NOT EXISTS idx_files_storage_type ON ${DbTables.FILES}(storage_type)`).run();
+                await db.prepare(`CREATE INDEX IF NOT EXISTS idx_files_file_path ON ${DbTables.FILES}(file_path)`).run();
+                await db.prepare(`CREATE INDEX IF NOT EXISTS idx_files_created_at ON ${DbTables.FILES}(created_at)`).run();
+                await db.prepare(`CREATE INDEX IF NOT EXISTS idx_files_expires_at ON ${DbTables.FILES}(expires_at)`).run();
+
+                console.log("成功删除s3_config_id字段并重建表结构");
+              } catch (dropError) {
+                console.error("删除s3_config_id字段时出错:", dropError);
+                console.log("数据迁移已完成，但旧字段删除失败，系统仍可正常工作");
+              }
+            }
+          } catch (migrationError) {
+            console.error("迁移files表数据时出错:", migrationError);
+            console.log("数据迁移失败，但表结构已更新，请手动检查数据完整性");
+          }
+        } catch (error) {
+          console.error(`版本9迁移失败:`, error);
+          console.log("将继续执行迁移过程，但请手动检查files表结构");
+        }
+        break;
+
+      case 10:
+        // 版本10：位标志权限系统迁移
+        try {
+          console.log("开始位标志权限系统迁移...");
+
+          // 首先备份现有的api_keys表数据
+          console.log("备份现有api_keys表数据...");
+          const existingKeys = await db.prepare(`SELECT * FROM ${DbTables.API_KEYS}`).all();
+          console.log(`找到 ${existingKeys.results?.length || 0} 条现有API密钥记录`);
+
+          // 检查新字段是否已存在
+          const columnInfo = await db.prepare(`PRAGMA table_info(${DbTables.API_KEYS})`).all();
+          const existingColumns = new Set(columnInfo.results.map((col) => col.name));
+
+          let needsFullMigration = false;
+
+          // 检查是否需要完整迁移
+          if (!existingColumns.has("permissions") || !existingColumns.has("role") || !existingColumns.has("is_guest")) {
+            needsFullMigration = true;
+            console.log("检测到需要完整的表结构迁移");
+
+            // 创建新的api_keys表结构
+            await db
+              .prepare(
+                `
+                CREATE TABLE ${DbTables.API_KEYS}_new (
+                  id TEXT PRIMARY KEY,
+                  name TEXT UNIQUE NOT NULL,
+                  key TEXT UNIQUE NOT NULL,
+                  permissions INTEGER DEFAULT 0,
+                  role TEXT DEFAULT 'GENERAL',
+                  basic_path TEXT DEFAULT '/',
+                  is_guest BOOLEAN DEFAULT 0,
+                  last_used DATETIME,
+                  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                  expires_at DATETIME NOT NULL
+                )
+              `
+              )
+              .run();
+
+            console.log("新api_keys表结构创建成功");
+
+            // 迁移数据：将布尔权限转换为位标志权限
+            if (existingKeys.results && existingKeys.results.length > 0) {
+              console.log("开始迁移权限数据...");
+
+              for (const keyRecord of existingKeys.results) {
+                let permissions = 0;
+
+                // 转换布尔权限为位标志权限
+                if (keyRecord.text_permission === 1) {
+                  permissions |= 1; // Permission.TEXT = 1 << 0
+                }
+                if (keyRecord.file_permission === 1) {
+                  permissions |= 2; // Permission.FILE_SHARE = 1 << 1
+                }
+                if (keyRecord.mount_permission === 1) {
+                  // 旧的mount权限映射为完整的挂载页权限
+                  permissions |= 256 | 512 | 1024 | 2048 | 4096; // MOUNT_VIEW | MOUNT_UPLOAD | MOUNT_COPY | MOUNT_RENAME | MOUNT_DELETE
+                }
+
+                // 确定角色
+                let role = "GENERAL";
+                if (permissions === 256) {
+                  // 只有MOUNT_VIEW权限
+                  role = "GUEST";
+                } else if (permissions > 0) {
+                  role = "GENERAL";
+                }
+
+                // 插入转换后的数据
+                await db
+                  .prepare(
+                    `
+                    INSERT INTO ${DbTables.API_KEYS}_new
+                    (id, name, key, permissions, role, basic_path, is_guest, last_used, created_at, expires_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                  `
+                  )
+                  .bind(
+                    keyRecord.id,
+                    keyRecord.name,
+                    keyRecord.key,
+                    permissions,
+                    role,
+                    keyRecord.basic_path || "/",
+                    role === "GUEST" ? 1 : 0,
+                    keyRecord.last_used,
+                    keyRecord.created_at,
+                    keyRecord.expires_at
+                  )
+                  .run();
+              }
+
+              console.log(`成功迁移 ${existingKeys.results.length} 条API密钥记录`);
+            }
+
+            // 删除旧表并重命名新表
+            await db.prepare(`DROP TABLE ${DbTables.API_KEYS}`).run();
+            await db.prepare(`ALTER TABLE ${DbTables.API_KEYS}_new RENAME TO ${DbTables.API_KEYS}`).run();
+
+            // 重新创建索引
+            await db.prepare(`CREATE INDEX IF NOT EXISTS idx_api_keys_key ON ${DbTables.API_KEYS}(key)`).run();
+            await db.prepare(`CREATE INDEX IF NOT EXISTS idx_api_keys_role ON ${DbTables.API_KEYS}(role)`).run();
+            await db.prepare(`CREATE INDEX IF NOT EXISTS idx_api_keys_permissions ON ${DbTables.API_KEYS}(permissions)`).run();
+            await db.prepare(`CREATE INDEX IF NOT EXISTS idx_api_keys_expires_at ON ${DbTables.API_KEYS}(expires_at)`).run();
+
+            console.log("api_keys表结构迁移完成");
+          } else {
+            console.log("api_keys表已包含新字段，跳过结构迁移");
+          }
+
+          // 验证迁移结果
+          const migratedKeys = await db.prepare(`SELECT COUNT(*) as count FROM ${DbTables.API_KEYS}`).first();
+          console.log(`迁移后api_keys表包含 ${migratedKeys?.count || 0} 条记录`);
+
+          // 显示权限迁移统计
+          const permissionStats = await db
+            .prepare(
+              `
+              SELECT
+                role,
+                COUNT(*) as count,
+                AVG(permissions) as avg_permissions
+              FROM ${DbTables.API_KEYS}
+              GROUP BY role
+            `
+            )
+            .all();
+
+          console.log("权限迁移统计:");
+          for (const stat of permissionStats.results || []) {
+            console.log(`  ${stat.role}: ${stat.count} 个用户, 平均权限值: ${Math.round(stat.avg_permissions)}`);
+          }
+
+          console.log("位标志权限系统迁移完成");
+        } catch (error) {
+          console.error(`版本10迁移失败:`, error);
+          console.log("位标志权限系统迁移失败，请手动检查api_keys表结构");
+        }
+        break;
+
+      case 11:
+        // 版本11：为storage_mounts表添加代理签名相关字段
+        try {
+          console.log(`为${DbTables.STORAGE_MOUNTS}表添加代理签名字段...`);
+
+          // 检查字段是否已存在
+          const columnInfo = await db.prepare(`PRAGMA table_info(${DbTables.STORAGE_MOUNTS})`).all();
+          const existingColumns = new Set(columnInfo.results.map((col) => col.name));
+
+          // 添加enable_sign字段
+          if (!existingColumns.has("enable_sign")) {
+            try {
+              await db.prepare(`ALTER TABLE ${DbTables.STORAGE_MOUNTS} ADD COLUMN enable_sign BOOLEAN DEFAULT 0`).run();
+              console.log(`成功添加enable_sign字段到${DbTables.STORAGE_MOUNTS}表`);
+            } catch (alterError) {
+              console.error(`无法添加enable_sign字段到${DbTables.STORAGE_MOUNTS}表:`, alterError);
+              console.log(`将继续执行迁移过程，但请手动检查${DbTables.STORAGE_MOUNTS}表结构`);
+            }
+          } else {
+            console.log(`${DbTables.STORAGE_MOUNTS}表已存在enable_sign字段，跳过添加`);
+          }
+
+          // 添加sign_expires字段
+          if (!existingColumns.has("sign_expires")) {
+            try {
+              await db.prepare(`ALTER TABLE ${DbTables.STORAGE_MOUNTS} ADD COLUMN sign_expires INTEGER DEFAULT NULL`).run();
+              console.log(`成功添加sign_expires字段到${DbTables.STORAGE_MOUNTS}表`);
+            } catch (alterError) {
+              console.error(`无法添加sign_expires字段到${DbTables.STORAGE_MOUNTS}表:`, alterError);
+              console.log(`将继续执行迁移过程，但请手动检查${DbTables.STORAGE_MOUNTS}表结构`);
+            }
+          } else {
+            console.log(`${DbTables.STORAGE_MOUNTS}表已存在sign_expires字段，跳过添加`);
+          }
+
+          // 添加全局代理签名设置
+          const globalSettings = [
+            {
+              key: "proxy_sign_all",
+              value: "true",
+              description: "签名所有：开启后所有代理访问都需要签名",
+            },
+            {
+              key: "proxy_sign_expires",
+              value: "0",
+              description: "全局签名过期时间（秒），0表示永不过期",
+            },
+          ];
+
+          for (const setting of globalSettings) {
+            try {
+              // 检查设置是否已存在
+              const existingSetting = await db.prepare(`SELECT key FROM ${DbTables.SYSTEM_SETTINGS} WHERE key = ?`).bind(setting.key).first();
+
+              if (!existingSetting) {
+                await db
+                  .prepare(
+                    `INSERT INTO ${DbTables.SYSTEM_SETTINGS} (key, value, description, updated_at)
+                     VALUES (?, ?, ?, CURRENT_TIMESTAMP)`
+                  )
+                  .bind(setting.key, setting.value, setting.description)
+                  .run();
+                console.log(`成功添加系统设置: ${setting.key}`);
+              } else {
+                console.log(`系统设置 ${setting.key} 已存在，跳过添加`);
+              }
+            } catch (settingError) {
+              console.error(`添加系统设置 ${setting.key} 失败:`, settingError);
+            }
+          }
+
+          console.log("代理签名字段和设置添加完成");
+        } catch (error) {
+          console.error(`版本11迁移失败:`, error);
+          console.log("代理签名功能迁移失败，请手动检查storage_mounts表结构和系统设置");
+        }
+        break;
     }
 
     // 记录迁移历史
@@ -553,7 +1044,7 @@ export async function checkAndInitDatabase(db) {
     }
 
     // 如果要添加新表或修改现有表，请递增目标版本，修改后启动时自动更新数据库
-    const targetVersion = 7; // 目标schema版本,每次修改表结构时递增
+    const targetVersion = 11; // 目标schema版本,每次修改表结构时递增
 
     if (currentVersion < targetVersion) {
       console.log(`需要更新数据库结构，当前版本:${currentVersion}，目标版本:${targetVersion}`);

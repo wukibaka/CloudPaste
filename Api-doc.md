@@ -35,9 +35,26 @@ Authorization: ApiKey <api_key>
 
 API 密钥由管理员在后台创建，支持以下权限类型：
 
-- **text_permission**: 文本分享权限 - 允许创建、查看、修改和删除文本分享
-- **file_permission**: 文件管理权限 - 允许上传、下载、管理文件和使用文件系统 API
-- **mount_permission**: 挂载点权限 - 允许访问挂载点和使用 WebDAV 功能
+**基础权限：**
+
+- **TEXT**: 文本分享权限 - 允许创建、查看、修改和删除文本分享
+- **FILE_SHARE**: 文件分享权限 - 允许创建和管理文件分享链接
+
+**挂载页权限：**
+
+- **MOUNT_VIEW**: 挂载页查看权限 - 允许浏览挂载页内容
+- **MOUNT_UPLOAD**: 上传权限 - 允许上传文件和创建目录
+- **MOUNT_COPY**: 复制权限 - 允许复制文件和目录
+- **MOUNT_RENAME**: 重命名权限 - 允许重命名文件和目录
+- **MOUNT_DELETE**: 删除权限 - 允许删除文件和目录
+
+**WebDAV 权限：**
+
+- **WEBDAV_READ**: WebDAV 读取权限 - 允许通过 WebDAV 读取文件（GET、PROPFIND 等）
+- **WEBDAV_MANAGE**: WebDAV 管理权限 - 允许通过 WebDAV 管理文件（PUT、DELETE、MKCOL 等）
+
+**路径限制：**
+
 - **basic_path**: 路径权限限制 - 限制 API 密钥用户只能访问指定路径及其子路径
 
 ### 3. WebDAV 认证
@@ -203,93 +220,54 @@ X-Custom-Auth-Key: <api_key>
     - `password` - 如果文本受密码保护，需提供密码
   - 响应：纯文本格式的内容，Content-Type 为 text/plain
 
-#### API 密钥用户文本管理
+#### 统一文本管理接口
 
-- `GET /api/user/pastes`
+- `GET /api/pastes`
 
-  - 描述：API 密钥用户获取自己的文本分享列表
-  - 授权：需要有文本权限的 API 密钥
+  - 描述：获取文本分享列表（统一接口，支持管理员和 API 密钥用户）
+  - 授权：需要管理员令牌或有文本权限的 API 密钥
   - 查询参数：
-    - `limit` - 每页数量，默认为 30
-    - `offset` - 偏移量，默认为 0
-  - 响应：文本分享列表和分页信息
+    - **管理员用户**：
+      - `page` - 页码，默认为 1
+      - `limit` - 每页数量，默认为 10
+      - `created_by` - 可选，按创建者筛选
+    - **API 密钥用户**：
+      - `limit` - 每页数量，默认为 30
+      - `offset` - 偏移量，默认为 0
+  - 响应：文本分享列表和分页信息，API 密钥用户只能看到自己创建的文本
 
-- `GET /api/user/pastes/:id`
+- `GET /api/pastes/:id`
 
-  - 描述：API 密钥用户获取单个文本详情
-  - 授权：需要有文本权限的 API 密钥
+  - 描述：获取单个文本详情（统一接口）
+  - 授权：需要管理员令牌或有文本权限的 API 密钥
   - 参数：id - 文本 ID
-  - 响应：文本分享详细信息，包含明文密码（如有）
+  - 响应：文本分享详细信息，API 密钥用户只能访问自己创建的文本
 
-- `DELETE /api/user/pastes/:id`
+- `DELETE /api/pastes/batch-delete`
 
-  - 描述：API 密钥用户删除单个文本
-  - 授权：需要有文本权限的 API 密钥
-  - 参数：id - 文本 ID
-  - 响应：删除结果
-
-- `POST /api/user/pastes/batch-delete`
-
-  - 描述：API 密钥用户批量删除文本
-  - 授权：需要有文本权限的 API 密钥
+  - 描述：批量删除文本（统一接口）
+  - 授权：需要管理员令牌或有文本权限的 API 密钥
   - 请求体：
     ```json
     {
       "ids": ["文本ID1", "文本ID2", "文本ID3"] // 必填，要删除的文本ID数组
     }
     ```
-  - 响应：批量删除结果
+  - 响应：批量删除结果，API 密钥用户只能删除自己创建的文本
 
-- `PUT /api/user/pastes/:slug`
-  - 描述：API 密钥用户更新文本信息
-  - 授权：需要有文本权限的 API 密钥
+- `PUT /api/pastes/:slug`
+  - 描述：更新文本信息（统一接口）
+  - 授权：需要管理员令牌或有文本权限的 API 密钥
   - 参数：slug - 文本短链接
   - 请求体：可包含 remark, expiresAt, maxViews, password 等字段
-  - 响应：更新后的文本信息
+  - 响应：更新后的文本信息，API 密钥用户只能更新自己创建的文本
 
-#### 管理员文本管理
+#### 管理员专用接口
 
-- `GET /api/admin/pastes`
+- `POST /api/pastes/clear-expired`
 
-  - 描述：管理员获取所有文本分享列表
+  - 描述：清理过期文本（管理员专用）
   - 授权：需要管理员令牌
-  - 查询参数：
-    - `page` - 页码，默认为 1
-    - `limit` - 每页数量，默认为 10
-    - `created_by` - 可选，按创建者筛选
-  - 响应：文本分享列表和分页信息
-
-- `GET /api/admin/pastes/:id`
-
-  - 描述：管理员获取单个文本详情
-  - 授权：需要管理员令牌
-  - 参数：id - 文本 ID
-  - 响应：文本分享详细信息
-
-- `DELETE /api/admin/pastes/:id`
-
-  - 描述：管理员删除单个文本
-  - 授权：需要管理员令牌
-  - 参数：id - 文本 ID
-  - 响应：删除结果
-
-- `POST /api/admin/pastes/batch-delete`
-
-  - 描述：管理员批量删除文本
-  - 授权：需要管理员令牌
-  - 请求体：
-    ```json
-    {
-      "ids": ["文本ID1", "文本ID2", "文本ID3"] // 必填，要删除的文本ID数组
-    }
-    ```
-  - 响应：批量删除结果
-
-- `POST /api/admin/pastes/clear-expired`
-
-  - 描述：清理过期文本分享
-  - 授权：需要管理员令牌
-  - 请求体：无
   - 响应：清理结果
     ```json
     {
@@ -298,13 +276,6 @@ X-Custom-Auth-Key: <api_key>
       "success": true
     }
     ```
-
-- `PUT /api/admin/pastes/:slug`
-  - 描述：管理员更新文本信息
-  - 授权：需要管理员令牌
-  - 参数：slug - 文本短链接
-  - 请求体：可包含 remark, expiresAt, maxViews, password 等字段
-  - 响应：更新后的文本信息
 
 ### 文件分享 API
 
@@ -388,69 +359,66 @@ X-Custom-Auth-Key: <api_key>
     ```
   - 响应：验证成功后返回带下载链接的文件信息
 
-#### API 密钥用户文件管理
+#### 统一文件管理接口
 
-- `GET /api/user/files`
+- `GET /api/files`
 
-  - 描述：API 密钥用户获取自己上传的文件列表
-  - 授权：需要有文件权限的 API 密钥
-  - 参数：limit(默认 30), offset(默认 0)
-  - 响应：文件列表和分页信息
-
-- `GET /api/user/files/:id`
-
-  - 描述：API 密钥用户获取单个文件详情
-  - 授权：需要有文件权限的 API 密钥
-  - 参数：id - 文件 ID
-  - 响应：文件详细信息和下载链接
-
-- `DELETE /api/user/files/:id`
-
-  - 描述：API 密钥用户删除单个文件
-  - 授权：需要有文件权限的 API 密钥
-  - 参数：id - 文件 ID
-  - 响应：删除结果
-
-- `PUT /api/user/files/:id`
-  - 描述：API 密钥用户更新文件信息
-  - 授权：需要有文件权限的 API 密钥
-  - 参数：id - 文件 ID
-  - 请求体：可包含 remark, expiresAt, maxDownloads, password 等字段
-  - 响应：更新后的文件信息
-
-#### 管理员文件管理
-
-- `GET /api/admin/files`
-
-  - 描述：管理员获取所有文件列表
-  - 授权：需要管理员令牌
+  - 描述：获取文件列表（统一接口，支持管理员和 API 密钥用户）
+  - 授权：需要管理员令牌或有文件权限的 API 密钥
   - 查询参数：
-    - `limit` - 每页数量，默认为 30
-    - `offset` - 偏移量，默认为 0
-    - `created_by` - 可选，按创建者筛选
-    - `s3_config_id` - 可选，按 S3 配置 ID 筛选
-  - 响应：文件列表和分页信息，包含 API 密钥名称等详细信息
+    - **管理员用户**：
+      - `limit` - 每页数量，默认为 30
+      - `offset` - 偏移量，默认为 0
+      - `created_by` - 可选，按创建者筛选
+    - **API 密钥用户**：
+      - `limit` - 每页数量，默认为 30
+      - `offset` - 偏移量，默认为 0
+  - 响应：文件列表和分页信息，API 密钥用户只能看到自己上传的文件
 
-- `GET /api/admin/files/:id`
+- `GET /api/files/:id`
 
-  - 描述：管理员获取单个文件详情
-  - 授权：需要管理员令牌
+  - 描述：获取单个文件详情（统一接口）
+  - 授权：需要管理员令牌或有文件权限的 API 密钥
   - 参数：id - 文件 ID
-  - 响应：文件详细信息和下载链接
+  - 响应：文件详细信息和下载链接，API 密钥用户只能访问自己上传的文件
 
-- `DELETE /api/admin/files/:id`
+- `PUT /api/files/:id`
 
-  - 描述：管理员删除单个文件
-  - 授权：需要管理员令牌
+  - 描述：更新文件信息（统一接口）
+  - 授权：需要管理员令牌或有文件权限的 API 密钥
   - 参数：id - 文件 ID
-  - 响应：删除结果
+  - 请求体：可包含 remark, slug, expires_at, max_views, password, use_proxy 等字段
+  - 响应：更新后的文件信息，API 密钥用户只能更新自己上传的文件
 
-- `PUT /api/admin/files/:id`
-  - 描述：管理员更新文件信息
-  - 授权：需要管理员令牌
-  - 参数：id - 文件 ID
-  - 请求体：可包含 remark, expiresAt, maxDownloads, password 等字段
-  - 响应：更新后的文件信息
+- `DELETE /api/files/batch-delete`
+
+  - 描述：批量删除文件（统一接口）
+  - 授权：需要管理员令牌或有文件权限的 API 密钥
+  - 请求体：
+    ```json
+    {
+      "ids": ["文件ID1", "文件ID2", "文件ID3"], // 必填，要删除的文件ID数组
+      "delete_mode": "both" // 可选，删除模式：record_only（仅删除记录）或 both（删除记录和文件，默认）
+    }
+    ```
+  - 响应：批量删除结果，包含成功和失败的统计信息，API 密钥用户只能删除自己上传的文件
+
+    ```json
+    {
+      "code": 200,
+      "message": "批量删除完成，成功: 2，失败: 1",
+      "data": {
+        "success": 2,
+        "failed": [
+          {
+            "id": "file-id-3",
+            "error": "文件不存在或无权限删除"
+          }
+        ]
+      },
+      "success": true
+    }
+    ```
 
 ### S3 存储配置 API
 
@@ -738,7 +706,7 @@ X-Custom-Auth-Key: <api_key>
         "max_upload_size": 100,
         "default_paste_expiry": 7,
         "default_file_expiry": 7,
-        "webdav_upload_mode": "auto"
+        "webdav_upload_mode": "direct"
       },
       "success": true
     }
@@ -753,7 +721,7 @@ X-Custom-Auth-Key: <api_key>
       "max_upload_size": 100, // 可选，最大上传大小（MB）
       "default_paste_expiry": 7, // 可选，默认文本过期天数
       "default_file_expiry": 7, // 可选，默认文件过期天数
-      "webdav_upload_mode": "auto" // 可选，WebDAV上传模式：auto/proxy/multipart/direct
+      "webdav_upload_mode": "direct" // 可选，WebDAV上传模式：multipart/direct
     }
     ```
   - 响应：更新后的系统设置
@@ -903,36 +871,41 @@ X-Custom-Auth-Key: <api_key>
 
 ### 文件系统 API
 
-#### 文件夹和文件操作 - 管理员版本
+文件系统 API 统一为 `/api/fs/*` 路径，支持管理员和 API 密钥用户认证。系统会根据认证信息自动处理权限和访问范围。
 
-- `GET /api/admin/fs/list`
+#### 统一文件系统操作
+
+- `GET /api/fs/list`
 
   - 描述：列出目录内容
-  - 授权：需要管理员令牌
+  - 授权：需要管理员令牌或有文件权限的 API 密钥
   - 查询参数：
     - `path` - 要列出内容的目录路径，默认为根目录("/")
   - 响应：目录内容列表，包含文件和子目录信息
+  - 权限：API 密钥用户只能访问其 basic_path 权限范围内的目录
 
-- `GET /api/admin/fs/get`
+- `GET /api/fs/get`
 
   - 描述：获取文件信息
-  - 授权：需要管理员令牌
+  - 授权：需要管理员令牌或有文件权限的 API 密钥
   - 查询参数：
     - `path` - 文件路径
   - 响应：文件详细信息
+  - 权限：API 密钥用户只能访问其 basic_path 权限范围内的文件
 
-- `GET /api/admin/fs/download`
+- `GET /api/fs/download`
 
   - 描述：下载文件（强制下载）
-  - 授权：需要管理员令牌
+  - 授权：需要管理员令牌或有文件权限的 API 密钥
   - 查询参数：
     - `path` - 文件路径
   - 响应：文件内容（下载），包含 Content-Disposition: attachment 头
+  - 权限：API 密钥用户只能下载其 basic_path 权限范围内的文件
 
-- `POST /api/admin/fs/mkdir`
+- `POST /api/fs/mkdir`
 
   - 描述：创建目录
-  - 授权：需要管理员令牌
+  - 授权：需要管理员令牌或有文件权限的 API 密钥
   - 请求体：
     ```json
     {
@@ -940,11 +913,12 @@ X-Custom-Auth-Key: <api_key>
     }
     ```
   - 响应：创建结果
+  - 权限：API 密钥用户只能在其 basic_path 权限范围内创建目录
 
-- `POST /api/admin/fs/upload`
+- `POST /api/fs/upload`
 
   - 描述：上传文件
-  - 授权：需要管理员令牌
+  - 授权：需要管理员令牌或有文件权限的 API 密钥
   - 请求体：FormData 格式
     - `file` - 文件内容（必填）
     - `path` - 上传目标路径，包含文件名（必填）
@@ -963,19 +937,12 @@ X-Custom-Auth-Key: <api_key>
       "success": true
     }
     ```
+  - 权限：API 密钥用户只能在其 basic_path 权限范围内上传文件
 
-- `DELETE /api/admin/fs/remove`
-
-  - 描述：删除文件或目录
-  - 授权：需要管理员令牌
-  - 查询参数：
-    - `path` - 要删除的文件或目录路径
-  - 响应：删除结果
-
-- `POST /api/admin/fs/rename`
+- `POST /api/fs/rename`
 
   - 描述：重命名文件或目录
-  - 授权：需要管理员令牌
+  - 授权：需要管理员令牌或有文件权限的 API 密钥
   - 请求体：
     ```json
     {
@@ -984,11 +951,12 @@ X-Custom-Auth-Key: <api_key>
     }
     ```
   - 响应：重命名结果
+  - 权限：API 密钥用户只能重命名其 basic_path 权限范围内的文件或目录
 
-- `POST /api/admin/fs/batch-remove`
+- `DELETE /api/fs/batch-remove`
 
   - 描述：批量删除文件或目录
-  - 授权：需要管理员令牌
+  - 授权：需要管理员令牌或有文件权限的 API 密钥
   - 请求体：
     ```json
     {
@@ -996,21 +964,23 @@ X-Custom-Auth-Key: <api_key>
     }
     ```
   - 响应：批量删除结果
+  - 权限：API 密钥用户只能删除其 basic_path 权限范围内的文件或目录
 
-- `GET /api/admin/fs/file-link`
+- `GET /api/fs/file-link`
 
   - 描述：获取文件直链(预签名 URL)，可用于直接访问文件，无需再次身份验证
-  - 授权：需要管理员令牌
+  - 授权：需要管理员令牌或有文件权限的 API 密钥
   - 查询参数：
     - `path` - 文件路径（必填）
     - `expires_in` - 链接有效期（秒），默认为 604800（7 天）
     - `force_download` - 是否强制下载，true 或 false（默认 false）
   - 响应：包含预签名 URL 的对象，可直接访问或分享
+  - 权限：API 密钥用户只能获取其 basic_path 权限范围内文件的直链
 
-- `POST /api/admin/fs/update`
+- `POST /api/fs/update`
 
   - 描述：更新文件内容或创建新文件
-  - 授权：需要管理员令牌
+  - 授权：需要管理员令牌或有文件权限的 API 密钥
   - 请求体：
     ```json
     {
@@ -1019,11 +989,12 @@ X-Custom-Auth-Key: <api_key>
     }
     ```
   - 响应：更新结果，包含文件路径、ETag、内容类型和是否为新创建的文件
+  - 权限：API 密钥用户只能更新其 basic_path 权限范围内的文件
 
-- `POST /api/admin/fs/presign`
+- `POST /api/fs/presign`
 
-  - 描述：获取管理员预签名上传 URL，用于直接上传文件到存储系统
-  - 授权：需要管理员令牌
+  - 描述：获取预签名上传 URL，用于直接上传文件到存储系统
+  - 授权：需要管理员令牌或有文件权限的 API 密钥
   - 请求体：
     ```json
     {
@@ -1034,11 +1005,12 @@ X-Custom-Auth-Key: <api_key>
     }
     ```
   - 响应：包含预签名 URL 和上传配置的对象
+  - 权限：API 密钥用户只能在其 basic_path 权限范围内获取预签名 URL
 
-- `POST /api/admin/fs/presign/commit`
+- `POST /api/fs/presign/commit`
 
   - 描述：提交预签名上传，确认文件上传完成并更新元数据
-  - 授权：需要管理员令牌
+  - 授权：需要管理员令牌或有文件权限的 API 密钥
   - 请求体：
     ```json
     {
@@ -1050,11 +1022,12 @@ X-Custom-Auth-Key: <api_key>
     }
     ```
   - 响应：文件上传完成状态和文件信息
+  - 权限：API 密钥用户只能在其 basic_path 权限范围内提交预签名上传
 
-- `POST /api/admin/fs/batch-copy`
+- `POST /api/fs/batch-copy`
 
-  - 描述：批量复制文件或目录
-  - 授权：需要管理员令牌
+  - 描述：批量复制文件或目录，支持自动重命名避免覆盖
+  - 授权：需要管理员令牌或有文件权限的 API 密钥
   - 请求体：
     ```json
     {
@@ -1069,16 +1042,19 @@ X-Custom-Auth-Key: <api_key>
           "targetPath": "目标路径2"
         }
       ],
-      "skipExisting": true // 可选，是否跳过已存在的文件，默认为true
+      "skipExisting": false // 可选，是否跳过已存在的文件，默认为false（使用自动重命名）
     }
     ```
   - 响应：批量复制结果，包含成功、跳过和失败的项目数量
-  - 特殊情况：如果涉及跨存储复制（不同存储类型之间的复制），响应中会包含`requiresClientSideCopy`标志和`crossStorageResults`数组，客户端需要执行额外的复制操作
+  - 特殊功能：
+    - **自动重命名**：当目标文件/目录已存在时，自动重命名为 `file(1).txt`、`folder(1)/` 等格式
+    - **跨存储复制**：支持不同存储类型之间的复制，响应中会包含`requiresClientSideCopy`标志和`crossStorageResults`数组
+  - 权限：API 密钥用户只能在其 basic_path 权限范围内进行复制操作
 
-- `POST /api/admin/fs/batch-copy-commit`
+- `POST /api/fs/batch-copy-commit`
 
   - 描述：提交批量跨存储复制完成信息
-  - 授权：需要管理员令牌
+  - 授权：需要管理员令牌或有文件权限的 API 密钥
   - 请求体：
     ```json
     {
@@ -1101,10 +1077,10 @@ X-Custom-Auth-Key: <api_key>
     ```
   - 响应：提交结果，包含成功和失败的文件数量
 
-- `GET /api/admin/fs/search`
+- `GET /api/fs/search`
 
   - 描述：搜索文件和目录
-  - 授权：需要管理员令牌
+  - 授权：需要管理员令牌或有文件权限的 API 密钥
   - 查询参数：
     - `query` - 搜索关键词（必填，至少 2 个字符）
     - `scope` - 搜索范围（可选，默认为"global"）
@@ -1147,214 +1123,31 @@ X-Custom-Auth-Key: <api_key>
       "success": true
     }
     ```
+  - 权限：API 密钥用户只能搜索其 basic_path 权限范围内的文件和目录
 
-#### 文件夹和文件操作 - API 密钥用户版本
+#### 分片上传 API
 
-- `GET /api/user/fs/list`
+**重要说明**：分片上传 API 已统一为 `/api/fs/multipart/*` 路径，支持管理员和 API 密钥用户认证。
 
-  - 描述：列出目录内容
-  - 授权：需要有文件权限的 API 密钥
-  - 查询参数：
-    - `path` - 要列出内容的目录路径，默认为根目录("/")
-  - 响应：目录内容列表，包含文件和子目录信息
-
-- `GET /api/user/fs/get`
-
-  - 描述：获取文件信息
-  - 授权：需要有文件权限的 API 密钥
-  - 查询参数：
-    - `path` - 文件路径
-  - 响应：文件详细信息
-
-- `GET /api/user/fs/download`
-
-  - 描述：下载文件（强制下载）
-  - 授权：需要有文件权限的 API 密钥
-  - 查询参数：
-    - `path` - 文件路径
-  - 响应：文件内容（下载），包含 Content-Disposition: attachment 头
-
-- `POST /api/user/fs/mkdir`
-
-  - 描述：创建目录
-  - 授权：需要有文件权限的 API 密钥
-  - 请求体：
-    ```json
-    {
-      "path": "要创建的目录路径" // 必填
-    }
-    ```
-  - 响应：创建结果
-
-- `POST /api/user/fs/upload`
-
-  - 描述：上传文件
-  - 授权：需要有文件权限的 API 密钥
-  - 请求体：FormData 格式
-    - `file` - 文件内容（必填）
-    - `path` - 上传目标路径，包含文件名（必填）
-    - `use_multipart` - 是否使用分片上传，true/false（可选）
-  - 响应：上传结果，格式同管理员版本
-  - 注意：API 密钥用户只能在其 basic_path 权限范围内上传文件
-
-- `DELETE /api/user/fs/remove`
-
-  - 描述：删除文件或目录
-  - 授权：需要有文件权限的 API 密钥
-  - 查询参数：
-    - `path` - 要删除的文件或目录路径
-  - 响应：删除结果
-
-- `POST /api/user/fs/rename`
-
-  - 描述：重命名文件或目录
-  - 授权：需要有文件权限的 API 密钥
-  - 请求体：
-    ```json
-    {
-      "oldPath": "原路径", // 必填
-      "newPath": "新路径" // 必填
-    }
-    ```
-  - 响应：重命名结果
-
-- `POST /api/user/fs/batch-remove`
-
-  - 描述：批量删除文件或目录
-  - 授权：需要有文件权限的 API 密钥
-  - 请求体：
-    ```json
-    {
-      "paths": ["路径1", "路径2", "..."] // 必填，要删除项目的路径数组
-    }
-    ```
-  - 响应：批量删除结果
-
-- `GET /api/user/fs/file-link`
-
-  - 描述：获取文件直链(预签名 URL)，可用于直接访问文件，无需再次身份验证
-  - 授权：需要有文件权限的 API 密钥
-  - 查询参数：
-    - `path` - 文件路径（必填）
-    - `expires_in` - 链接有效期（秒），默认为 604800（7 天）
-    - `force_download` - 是否强制下载，true 或 false（默认 false）
-  - 响应：包含预签名 URL 的对象，可直接访问或分享
-
-- `POST /api/user/fs/update`
-
-  - 描述：更新文件内容或创建新文件
-  - 授权：需要有文件权限的 API 密钥
-  - 请求体：
-    ```json
-    {
-      "path": "文件路径", // 必填，包含文件名
-      "content": "文件内容" // 必填，文件的新内容
-    }
-    ```
-  - 响应：更新结果，包含文件路径、ETag、内容类型和是否为新创建的文件
-
-- `POST /api/user/fs/presign`
-
-  - 描述：获取用户预签名上传 URL，用于直接上传文件到存储系统
-  - 授权：需要有文件权限的 API 密钥
-  - 请求体：格式同管理员版本
-  - 响应：包含预签名 URL 和上传配置的对象
-
-- `POST /api/user/fs/presign/commit`
-
-  - 描述：提交预签名上传，确认文件上传完成并更新元数据
-  - 授权：需要有文件权限的 API 密钥
-  - 请求体：格式同管理员版本
-  - 响应：文件上传完成状态和文件信息
-
-- `POST /api/user/fs/batch-copy`
-
-  - 描述：批量复制文件或目录
-  - 授权：需要有文件权限的 API 密钥
-  - 请求体：
-    ```json
-    {
-      "items": [
-        // 必填，要复制的项目数组
-        {
-          "sourcePath": "源路径1", // 必填，源文件或目录路径
-          "targetPath": "目标路径1" // 必填，目标文件或目录路径
-        },
-        {
-          "sourcePath": "源路径2",
-          "targetPath": "目标路径2"
-        }
-      ],
-      "skipExisting": true // 可选，是否跳过已存在的文件，默认为true
-    }
-    ```
-  - 响应：批量复制结果，包含成功、跳过和失败的项目数量
-  - 特殊情况：如果涉及跨存储复制（不同存储类型之间的复制），响应中会包含`requiresClientSideCopy`标志和`crossStorageResults`数组，客户端需要执行额外的复制操作
-
-- `POST /api/user/fs/batch-copy-commit`
-
-  - 描述：提交批量跨存储复制完成信息
-  - 授权：需要有文件权限的 API 密钥
-  - 请求体：
-    ```json
-    {
-      "targetMountId": "目标挂载点ID", // 必填
-      "files": [
-        // 必填，已复制文件列表
-        {
-          "targetPath": "目标路径1", // 必填
-          "s3Path": "S3存储路径1", // 必填
-          "contentType": "文件MIME类型", // 可选
-          "fileSize": 1024000, // 可选，文件大小（字节）
-          "etag": "文件ETag" // 可选
-        },
-        {
-          "targetPath": "目标路径2",
-          "s3Path": "S3存储路径2"
-        }
-      ]
-    }
-    ```
-  - 响应：提交结果，包含成功和失败的文件数量
-
-- `GET /api/user/fs/search`
-
-  - 描述：搜索文件和目录
-  - 授权：需要有文件权限的 API 密钥
-  - 查询参数：
-    - `query` - 搜索关键词（必填，至少 2 个字符）
-    - `scope` - 搜索范围（可选，默认为"global"）
-      - `global` - 全局搜索，搜索 API 密钥可访问的所有挂载点
-      - `mount` - 单个挂载点搜索，需要配合 mount_id 参数
-      - `directory` - 目录搜索，搜索指定路径及其子目录，需要配合 path 参数
-    - `mount_id` - 挂载点 ID（当 scope 为"mount"时必填）
-    - `path` - 搜索路径（当 scope 为"directory"时必填，受 basic_path 权限限制）
-    - `limit` - 结果数量限制（可选，默认 50，最大 200）
-    - `offset` - 结果偏移量（可选，默认 0）
-  - 响应：搜索结果，格式同管理员版本
-  - 注意：API 密钥用户只能搜索其 basic_path 权限范围内的文件和目录
-
-#### 分片上传 API - 管理员版本
-
-- `POST /api/admin/fs/multipart/init`
+- `POST /api/fs/multipart/init`
 
   - 描述：初始化分片上传
-  - 授权：需要管理员令牌
+  - 授权：需要管理员令牌或有文件权限的 API 密钥
   - 请求体：
     ```json
     {
       "path": "上传目标路径", // 必填，包含文件名
       "contentType": "文件MIME类型", // 可选，默认为application/octet-stream
-      "fileSize": 1024000, // 可选，文件大小（字节）
       "filename": "文件名.jpg" // 可选，如果path中未包含
     }
     ```
   - 响应：初始化信息，包含 uploadId 和其他元数据
+  - 权限：API 密钥用户只能在其 basic_path 权限范围内初始化分片上传
 
-- `POST /api/admin/fs/multipart/part`
+- `POST /api/fs/multipart/part`
 
   - 描述：上传文件分片
-  - 授权：需要管理员令牌
+  - 授权：需要管理员令牌或有文件权限的 API 密钥
   - 查询参数：
     - `path` - 上传目标路径（必填）
     - `uploadId` - 分片上传 ID（必填，来自 init 响应）
@@ -1363,11 +1156,12 @@ X-Custom-Auth-Key: <api_key>
     - `key` - S3 存储键值（可选，来自 init 响应）
   - 请求体：分片内容（二进制）
   - 响应：分片上传结果，包含 ETag 等信息
+  - 权限：API 密钥用户只能在其 basic_path 权限范围内上传分片
 
-- `POST /api/admin/fs/multipart/complete`
+- `POST /api/fs/multipart/complete`
 
   - 描述：完成分片上传
-  - 授权：需要管理员令牌
+  - 授权：需要管理员令牌或有文件权限的 API 密钥
   - 请求体：
     ```json
     {
@@ -1388,10 +1182,12 @@ X-Custom-Auth-Key: <api_key>
     }
     ```
   - 响应：上传完成结果
+  - 权限：API 密钥用户只能在其 basic_path 权限范围内完成分片上传
 
-- `POST /api/admin/fs/multipart/abort`
+- `POST /api/fs/multipart/abort`
+
   - 描述：中止分片上传
-  - 授权：需要管理员令牌
+  - 授权：需要管理员令牌或有文件权限的 API 密钥
   - 请求体：
     ```json
     {
@@ -1401,36 +1197,7 @@ X-Custom-Auth-Key: <api_key>
     }
     ```
   - 响应：中止结果
-
-#### 分片上传 API - API 密钥用户版本
-
-- `POST /api/user/fs/multipart/init`
-
-  - 描述：初始化分片上传
-  - 授权：需要有文件权限的 API 密钥
-  - 请求体：格式同管理员版本
-  - 响应：初始化信息，包含 uploadId 和其他元数据
-
-- `POST /api/user/fs/multipart/part`
-
-  - 描述：上传文件分片
-  - 授权：需要有文件权限的 API 密钥
-  - 查询参数：格式同管理员版本
-  - 请求体：分片内容（二进制）
-  - 响应：分片上传结果，包含 ETag 等信息
-
-- `POST /api/user/fs/multipart/complete`
-
-  - 描述：完成分片上传
-  - 授权：需要有文件权限的 API 密钥
-  - 请求体：格式同管理员版本
-  - 响应：上传完成结果
-
-- `POST /api/user/fs/multipart/abort`
-  - 描述：中止分片上传
-  - 授权：需要有文件权限的 API 密钥
-  - 请求体：格式同管理员版本
-  - 响应：中止结果
+  - 权限：API 密钥用户只能在其 basic_path 权限范围内中止分片上传
 
 ### WebDAV 接口
 

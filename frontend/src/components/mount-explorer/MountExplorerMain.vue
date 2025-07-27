@@ -8,44 +8,44 @@
     <div class="card mb-4" :class="darkMode ? 'bg-gray-800/50 border-gray-700' : 'bg-white border-gray-200'">
       <div class="p-3">
         <FileOperations
-            :current-path="currentPath"
-            :is-virtual="isVirtualDirectory"
-            :dark-mode="darkMode"
-            :view-mode="viewMode"
-            :selected-items="selectedItems"
-            @create-folder="handleCreateFolder"
-            @refresh="handleRefresh"
-            @change-view-mode="handleViewModeChange"
-            @openUploadModal="handleOpenUploadModal"
-            @openCopyModal="handleBatchCopy"
-            @openTasksModal="handleOpenTasksModal"
-            @task-created="handleTaskCreated"
-            @show-message="handleShowMessage"
+          :current-path="currentPath"
+          :is-virtual="isVirtualDirectory"
+          :dark-mode="darkMode"
+          :view-mode="viewMode"
+          :selected-items="selectedItems"
+          @create-folder="handleCreateFolder"
+          @refresh="handleRefresh"
+          @change-view-mode="handleViewModeChange"
+          @openUploadModal="handleOpenUploadModal"
+          @openCopyModal="handleBatchCopy"
+          @openTasksModal="handleOpenTasksModal"
+          @task-created="handleTaskCreated"
+          @show-message="handleShowMessage"
         />
       </div>
     </div>
 
     <!-- 上传弹窗 -->
     <UploadModal
-        :is-open="isUploadModalOpen"
-        :current-path="currentPath"
-        :dark-mode="darkMode"
-        :is-admin="authStore.isAdmin"
-        @close="handleCloseUploadModal"
-        @upload-success="handleUploadSuccess"
-        @upload-error="handleUploadError"
+      :is-open="isUploadModalOpen"
+      :current-path="currentPath"
+      :dark-mode="darkMode"
+      :is-admin="authStore.isAdmin"
+      @close="handleCloseUploadModal"
+      @upload-success="handleUploadSuccess"
+      @upload-error="handleUploadError"
     />
 
     <!-- 复制弹窗 -->
     <CopyModal
-        :is-open="isCopyModalOpen"
-        :dark-mode="darkMode"
-        :selected-items="getSelectedItems()"
-        :source-path="currentPath"
-        :is-admin="authStore.isAdmin"
-        :api-key-info="authStore.apiKeyInfo"
-        @close="handleCloseCopyModal"
-        @copy-complete="handleCopyComplete"
+      :is-open="isCopyModalOpen"
+      :dark-mode="darkMode"
+      :selected-items="getSelectedItems()"
+      :source-path="currentPath"
+      :is-admin="authStore.isAdmin"
+      :api-key-info="authStore.apiKeyInfo"
+      @close="handleCloseCopyModal"
+      @copy-complete="handleCopyComplete"
     />
 
     <!-- 任务管理弹窗 -->
@@ -87,11 +87,49 @@
         </div>
 
         <div class="flex justify-end space-x-2">
-          <button @click="cancelDelete" class="px-4 py-2 rounded-md transition-colors" :class="darkMode ? 'text-gray-300 hover:bg-gray-700' : 'text-gray-700 hover:bg-gray-100'">
+          <button
+            @click="cancelDelete"
+            :disabled="isDeleting"
+            class="px-4 py-2 rounded-md transition-colors"
+            :class="[darkMode ? 'text-gray-300 hover:bg-gray-700' : 'text-gray-700 hover:bg-gray-100', isDeleting ? 'opacity-50 cursor-not-allowed' : '']"
+          >
             {{ itemsToDelete.length === 1 ? t("mount.delete.cancel") : t("mount.batchDelete.cancelButton") }}
           </button>
-          <button @click="confirmDelete" class="px-4 py-2 rounded-md text-white transition-colors bg-red-600 hover:bg-red-700">
-            {{ itemsToDelete.length === 1 ? t("mount.delete.confirm") : t("mount.batchDelete.confirmButton") }}
+          <button
+            @click="confirmDelete"
+            :disabled="isDeleting"
+            class="px-4 py-2 rounded-md text-white transition-colors flex items-center space-x-2"
+            :class="[isDeleting ? 'bg-red-500 cursor-not-allowed' : 'bg-red-600 hover:bg-red-700']"
+          >
+            <!-- 删除中的loading图标 -->
+            <svg v-if="isDeleting" class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path
+                class="opacity-75"
+                fill="currentColor"
+                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+              ></path>
+            </svg>
+            <!-- 删除图标 -->
+            <svg v-else class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+              />
+            </svg>
+            <span>
+              {{
+                isDeleting
+                  ? itemsToDelete.length === 1
+                    ? t("mount.delete.deleting")
+                    : t("mount.batchDelete.deleting")
+                  : itemsToDelete.length === 1
+                  ? t("mount.delete.confirm")
+                  : t("mount.batchDelete.confirmButton")
+              }}
+            </span>
           </button>
         </div>
       </div>
@@ -100,26 +138,26 @@
     <!-- 面包屑导航 -->
     <div class="mb-4">
       <BreadcrumbNav
-          :current-path="currentPath"
-          :dark-mode="darkMode"
-          :preview-file="isPreviewMode ? previewFile : null"
-          @navigate="handleNavigate"
-          :is-checkbox-mode="isCheckboxMode"
-          :selected-count="selectedCount"
-          @toggle-checkbox-mode="toggleCheckboxMode"
-          @batch-delete="batchDelete"
-          @batch-copy="handleBatchCopy"
-          @batch-add-to-basket="handleBatchAddToBasket"
-          :basic-path="authStore.apiKeyInfo?.basic_path || '/'"
-          :user-type="authStore.isAdmin ? 'admin' : 'user'"
+        :current-path="currentPath"
+        :dark-mode="darkMode"
+        :preview-file="isPreviewMode ? previewFile : null"
+        @navigate="handleNavigate"
+        :is-checkbox-mode="isCheckboxMode"
+        :selected-count="selectedCount"
+        @toggle-checkbox-mode="toggleCheckboxMode"
+        @batch-delete="batchDelete"
+        @batch-copy="handleBatchCopy"
+        @batch-add-to-basket="handleBatchAddToBasket"
+        :basic-path="authStore.apiKeyInfo?.basic_path || '/'"
+        :user-type="authStore.isAdmin ? 'admin' : 'user'"
       />
     </div>
 
     <!-- 消息提示 -->
     <div v-if="message" class="mb-4">
       <div
-          class="p-3 rounded-md border"
-          :class="{
+        class="p-3 rounded-md border"
+        :class="{
           'bg-green-50 border-green-200 text-green-800 dark:bg-green-900/30 dark:border-green-700/50 dark:text-green-200': message.type === 'success',
           'bg-red-50 border-red-200 text-red-800 dark:bg-red-900/30 dark:border-red-700/50 dark:text-red-200': message.type === 'error',
           'bg-yellow-50 border-yellow-200 text-yellow-800 dark:bg-yellow-900/30 dark:border-yellow-700/50 dark:text-yellow-200': message.type === 'warning',
@@ -153,9 +191,9 @@
           <div class="flex items-center">
             <svg class="w-5 h-5 text-red-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
               <path
-                  fill-rule="evenodd"
-                  d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
-                  clip-rule="evenodd"
+                fill-rule="evenodd"
+                d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+                clip-rule="evenodd"
               ></path>
             </svg>
             <span class="text-red-800 dark:text-red-200">{{ error }}</span>
@@ -167,9 +205,9 @@
           <div class="flex items-center">
             <svg class="w-5 h-5 text-yellow-600 dark:text-yellow-400 mr-2" fill="currentColor" viewBox="0 0 20 20">
               <path
-                  fill-rule="evenodd"
-                  d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
-                  clip-rule="evenodd"
+                fill-rule="evenodd"
+                d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
+                clip-rule="evenodd"
               ></path>
             </svg>
             <span class="text-yellow-800 dark:text-yellow-200">
@@ -180,24 +218,24 @@
 
         <!-- 目录列表 -->
         <DirectoryList
-            v-else
-            :items="directoryItems"
-            :loading="loading"
-            :is-virtual="isVirtualDirectory"
-            :dark-mode="darkMode"
-            :view-mode="viewMode"
-            :is-checkbox-mode="isCheckboxMode"
-            :selected-items="getSelectedItems()"
-            :current-path="currentPath"
-            @navigate="handleNavigate"
-            @download="handleDownload"
-            @getLink="handleGetLink"
-            @rename="handleRename"
-            @delete="handleDelete"
-            @preview="handlePreview"
-            @item-select="handleItemSelect"
-            @toggle-select-all="toggleSelectAll"
-            @show-message="handleShowMessage"
+          v-else
+          :items="directoryItems"
+          :loading="loading"
+          :is-virtual="isVirtualDirectory"
+          :dark-mode="darkMode"
+          :view-mode="viewMode"
+          :is-checkbox-mode="isCheckboxMode"
+          :selected-items="getSelectedItems()"
+          :current-path="currentPath"
+          @navigate="handleNavigate"
+          @download="handleDownload"
+          @getLink="handleGetLink"
+          @rename="handleRename"
+          @delete="handleDelete"
+          @preview="handlePreview"
+          @item-select="handleItemSelect"
+          @toggle-select-all="toggleSelectAll"
+          @show-message="handleShowMessage"
         />
       </div>
 
@@ -207,9 +245,9 @@
           <!-- 返回按钮 -->
           <div class="mb-4">
             <button
-                @click="closePreviewWithUrl"
-                class="inline-flex items-center px-3 py-1.5 rounded-md transition-colors text-sm font-medium"
-                :class="darkMode ? 'bg-gray-700 hover:bg-gray-600 text-gray-200' : 'bg-gray-200 hover:bg-gray-300 text-gray-700'"
+              @click="closePreviewWithUrl"
+              class="inline-flex items-center px-3 py-1.5 rounded-md transition-colors text-sm font-medium"
+              :class="darkMode ? 'bg-gray-700 hover:bg-gray-600 text-gray-200' : 'bg-gray-200 hover:bg-gray-300 text-gray-700'"
             >
               <svg class="w-4 h-4 mr-1.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
@@ -220,16 +258,17 @@
 
           <!-- 文件预览内容 -->
           <FilePreview
-              :file="previewInfo || previewFile"
-              :dark-mode="darkMode"
-              :is-loading="isPreviewLoading"
-              :is-admin="authStore.isAdmin"
-              :api-key-info="authStore.apiKeyInfo"
-              :has-file-permission="authStore.hasFilePermission"
-              :directory-items="directoryItems"
-              @download="handleDownload"
-              @loaded="handlePreviewLoaded"
-              @error="handlePreviewError"
+            :file="previewInfo || previewFile"
+            :dark-mode="darkMode"
+            :is-loading="isPreviewLoading"
+            :is-admin="authStore.isAdmin"
+            :api-key-info="authStore.apiKeyInfo"
+            :has-file-permission="authStore.hasFilePermission"
+            :directory-items="directoryItems"
+            @download="handleDownload"
+            @loaded="handlePreviewLoaded"
+            @error="handlePreviewError"
+            @show-message="handleShowMessage"
           />
         </div>
       </div>
@@ -309,6 +348,7 @@ const {
 
 const showDeleteDialog = ref(false);
 const itemsToDelete = ref([]);
+const isDeleting = ref(false);
 
 // 计算属性
 
@@ -488,6 +528,9 @@ const batchDelete = () => {
  * 取消删除
  */
 const cancelDelete = () => {
+  // 删除过程中不允许取消
+  if (isDeleting.value) return;
+
   showDeleteDialog.value = false;
   itemsToDelete.value = [];
 };
@@ -496,27 +539,36 @@ const cancelDelete = () => {
  * 确认删除
  */
 const confirmDelete = async () => {
-  if (itemsToDelete.value.length === 0) return;
+  if (itemsToDelete.value.length === 0 || isDeleting.value) return;
 
-  // 使用fileOperations删除项目
-  const result = await fileOperations.batchDeleteItems(itemsToDelete.value);
+  isDeleting.value = true;
 
-  if (result.success) {
-    showMessage("success", result.message);
+  try {
+    // 使用fileOperations删除项目
+    const result = await fileOperations.batchDeleteItems(itemsToDelete.value);
 
-    // 如果是批量删除，清空选择状态
-    if (itemsToDelete.value.length > 1) {
-      toggleCheckboxMode(false);
+    if (result.success) {
+      showMessage("success", result.message);
+
+      // 如果是批量删除，清空选择状态
+      if (itemsToDelete.value.length > 1) {
+        toggleCheckboxMode(false);
+      }
+
+      // 关闭对话框
+      showDeleteDialog.value = false;
+      itemsToDelete.value = [];
+
+      // 重新加载当前目录内容
+      await refreshDirectory();
+    } else {
+      showMessage("error", result.message);
     }
-
-    // 关闭对话框
-    showDeleteDialog.value = false;
-    itemsToDelete.value = [];
-
-    // 重新加载当前目录内容
-    await refreshDirectory();
-  } else {
-    showMessage("error", result.message);
+  } catch (error) {
+    console.error("删除操作失败:", error);
+    showMessage("error", error.message || t("mount.messages.deleteFailed", { message: t("common.unknown") }));
+  } finally {
+    isDeleting.value = false;
   }
 };
 
@@ -569,7 +621,12 @@ const handleCopyComplete = (event) => {
   const message = event?.message || t("mount.messages.copySuccess", { message: t("mount.taskManager.copyStarted", { count: 0, path: "" }) });
   showMessage("success", message);
   toggleCheckboxMode(false);
-  closeCopyModal(); // 关闭复制模态框
+
+  // 只有在模态框未关闭时才关闭模态框
+  if (!event?.modalAlreadyClosed) {
+    closeCopyModal();
+  }
+
   refreshDirectory();
 };
 
@@ -635,11 +692,11 @@ const closePreviewWithUrl = () => {
 
 // 监听目录项目变化，更新选择状态
 watch(
-    () => directoryItems.value,
-    (newItems) => {
-      setAvailableItems(newItems);
-    },
-    { immediate: true }
+  () => directoryItems.value,
+  (newItems) => {
+    setAvailableItems(newItems);
+  },
+  { immediate: true }
 );
 
 /**
@@ -650,7 +707,7 @@ const handleDirectoryChange = async () => {
     await initializeFromRoute();
   } catch (error) {
     console.error("目录变化处理失败:", error);
-    showMessage("error", "页面加载失败");
+    showMessage("error", t("mount.messages.pageLoadFailed"));
   }
 };
 
@@ -662,7 +719,7 @@ const handlePreviewChange = async () => {
     await initPreviewFromRoute(currentPath.value, directoryItems.value);
   } catch (error) {
     console.error("预览变化处理失败:", error);
-    showMessage("error", "预览加载失败");
+    showMessage("error", t("mount.messages.previewLoadFailed"));
   }
 };
 
@@ -681,12 +738,12 @@ const createAuthStateComparator = () => {
       apiKeyId: currentAuth.apiKeyInfo?.id || null,
       basicPath: currentAuth.apiKeyInfo?.basic_path || null,
       permissions: currentAuth.apiKeyInfo?.permissions
-          ? {
+        ? {
             text: !!currentAuth.apiKeyInfo.permissions.text,
             file: !!currentAuth.apiKeyInfo.permissions.file,
             mount: !!currentAuth.apiKeyInfo.permissions.mount,
           }
-          : null,
+        : null,
     };
 
     // 首次调用
@@ -754,7 +811,7 @@ const createAsyncProcessor = () => {
       }
     } catch (error) {
       console.error("异步处理失败:", error);
-      showMessage("error", "页面加载失败，请刷新重试");
+      showMessage("error", t("mount.messages.pageLoadFailedRetry"));
     } finally {
       isProcessing = false;
     }
@@ -767,57 +824,57 @@ const asyncProcessor = createAsyncProcessor();
 
 // 权限状态监听器 - 高性能版本
 watch(
-    () => ({ isAdmin: authStore.isAdmin, apiKeyInfo: authStore.apiKeyInfo }),
-    (newAuth) => {
-      const comparison = authComparator(newAuth);
+  () => ({ isAdmin: authStore.isAdmin, apiKeyInfo: authStore.apiKeyInfo }),
+  (newAuth) => {
+    const comparison = authComparator(newAuth);
 
-      if (comparison.changed) {
-        console.log("权限状态变化检测:", {
-          isFirstCall: comparison.isFirstCall,
-          changes: comparison.changes,
-          newAuth: {
-            isAdmin: newAuth.isAdmin,
-            apiKeyId: newAuth.apiKeyInfo?.id,
-            basicPath: newAuth.apiKeyInfo?.basic_path,
-          },
-        });
+    if (comparison.changed) {
+      console.log("权限状态变化检测:", {
+        isFirstCall: comparison.isFirstCall,
+        changes: comparison.changes,
+        newAuth: {
+          isAdmin: newAuth.isAdmin,
+          apiKeyId: newAuth.apiKeyInfo?.id,
+          basicPath: newAuth.apiKeyInfo?.basic_path,
+        },
+      });
 
-        // 确保权限信息已经加载
-        if (typeof newAuth.isAdmin !== "boolean") {
-          console.log("等待权限信息加载...");
-          return;
-        }
-
-        // 使用异步处理器防止竞态条件
-        asyncProcessor(async () => {
-          await handleDirectoryChange();
-        });
+      // 确保权限信息已经加载
+      if (typeof newAuth.isAdmin !== "boolean") {
+        console.log("等待权限信息加载...");
+        return;
       }
-    },
-    { immediate: true }
+
+      // 使用异步处理器防止竞态条件
+      asyncProcessor(async () => {
+        await handleDirectoryChange();
+      });
+    }
+  },
+  { immediate: true }
 );
 
 // 路由路径监听器 - 独立处理
 watch(
-    () => route.params.pathMatch,
-    (newPath, oldPath) => {
-      if (newPath !== oldPath) {
-        asyncProcessor(async () => {
-          await handleDirectoryChange();
-        });
-      }
+  () => route.params.pathMatch,
+  (newPath, oldPath) => {
+    if (newPath !== oldPath) {
+      asyncProcessor(async () => {
+        await handleDirectoryChange();
+      });
     }
+  }
 );
 
 // 预览文件监听器 - 独立处理
 watch(
-    () => route.query.preview,
-    () => {
-      asyncProcessor(async () => {
-        await handlePreviewChange();
-      });
-    },
-    { immediate: true }
+  () => route.query.preview,
+  () => {
+    asyncProcessor(async () => {
+      await handlePreviewChange();
+    });
+  },
+  { immediate: true }
 );
 
 // 组件挂载时恢复视图首选项

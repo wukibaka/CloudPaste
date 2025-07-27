@@ -16,6 +16,7 @@ import * as mountService from "./services/mountService";
 import * as systemService from "./services/systemService";
 import * as urlUploadService from "./services/urlUploadService";
 import * as fsService from "./services/fsService";
+import * as previewService from "./services/previewService";
 
 // 统一服务导出 - 按功能模块重新组织
 export const api = {
@@ -26,7 +27,17 @@ export const api = {
   paste: pasteService,
 
   // 文件管理相关
-  file: fileService,
+  file: {
+    ...fileService,
+    // 统一接口
+    getFiles: fileService.getFiles,
+    getFile: fileService.getFile,
+    updateFile: fileService.updateFile,
+    batchDeleteFiles: fileService.batchDeleteFiles,
+  },
+
+  // 文件预览相关
+  preview: previewService,
 
   // 存储配置相关
   storage: storageService,
@@ -35,15 +46,19 @@ export const api = {
   mount: mountService,
 
   // 系统管理相关
-  system: systemService,
+  system: {
+    ...systemService,
+    // 代理签名设置
+    getProxySignSettings: systemService.getProxySignSettings,
+    updateProxySignSettings: systemService.updateProxySignSettings,
+  },
 
   // URL上传相关
   urlUpload: urlUploadService,
 
-  // 文件系统相关
+  // 文件系统相关 - 统一API，自动根据认证信息处理用户类型
   fs: {
     ...fsService,
-    getUserTypeApi: fsService.getFsApiByUserType,
   },
 
   // 兼容性导出 - 保持向后兼容
@@ -60,13 +75,12 @@ export const api = {
     deleteApiKey: authService.deleteApiKey,
     updateApiKey: authService.updateApiKey,
 
-    // 文本分享管理
-    getAllPastes: pasteService.getAllPastes,
-    getPasteById: pasteService.getAdminPasteById,
-    updatePaste: pasteService.updateAdminPaste,
-    deletePaste: pasteService.deleteAdminPaste,
-    deletePastes: pasteService.deleteAdminPastes,
-    clearExpiredPastes: systemService.clearExpiredPastes,
+    // 文本分享管理（统一接口）
+    getPastes: pasteService.getPastes,
+    getPasteById: pasteService.getPasteById,
+    updatePaste: pasteService.updatePaste,
+    batchDeletePastes: pasteService.batchDeletePastes,
+    clearExpiredPastes: pasteService.clearExpiredPastes,
 
     // S3配置管理（已迁移到storage）
     getAllS3Configs: storageService.getAllS3Configs,
@@ -84,22 +98,19 @@ export const api = {
     getCacheStats: systemService.getCacheStats,
     clearCache: systemService.clearCacheAdmin,
 
-    // 文件系统管理
-    getDirectoryList: fsService.getAdminDirectoryList,
-    getFileInfo: fsService.getAdminFileInfo,
-    getFileDownloadUrl: fsService.getAdminFileDownloadUrl,
-    getFileLink: fsService.getAdminFileLink,
-    createDirectory: fsService.createAdminDirectory,
-    uploadFile: fsService.uploadAdminFile,
-    deleteItem: fsService.deleteAdminItem,
-    batchDeleteItems: fsService.batchDeleteAdminItems,
-    renameItem: fsService.renameAdminItem,
-    updateFile: fsService.updateAdminFile,
+    // 文件系统管理 - 使用统一API
+    getDirectoryList: fsService.getDirectoryList,
+    getFileInfo: fsService.getFileInfo,
+    getFileDownloadUrl: fsService.getFileDownloadUrl,
+    getFileLink: fsService.getFileLink,
+    createDirectory: fsService.createDirectory,
+    uploadFile: fsService.uploadFile,
+    batchDeleteItems: fsService.batchDeleteItems,
+    renameItem: fsService.renameItem,
+    updateFile: fsService.updateFile,
     // 复制相关
-    copyItem: fsService.copyAdminItem,
-    batchCopyItems: fsService.batchCopyAdminItems,
-    commitBatchCopy: fsService.commitAdminBatchCopy,
-    commitCopy: fsService.commitAdminCopy,
+    batchCopyItems: fsService.batchCopyItems,
+    commitBatchCopy: fsService.commitBatchCopy,
   },
 
   file: {
@@ -110,17 +121,11 @@ export const api = {
     completeFileUpload: fileService.completeFileUpload,
     getMaxUploadSize: systemService.getMaxUploadSize,
 
-    // 管理员文件管理
-    getFiles: fileService.getAdminFiles,
-    getFile: fileService.getAdminFile,
-    updateFile: fileService.updateAdminFile,
-    deleteFile: fileService.deleteAdminFile,
-
-    // API密钥用户文件管理
-    getUserFiles: fileService.getUserFiles,
-    getUserFile: fileService.getUserFile,
-    updateUserFile: fileService.updateUserFile,
-    deleteUserFile: fileService.deleteUserFile,
+    // 统一文件管理
+    getFiles: fileService.getFiles,
+    getFile: fileService.getFile,
+    updateFile: fileService.updateFile,
+    batchDeleteFiles: fileService.batchDeleteFiles,
 
     // 公共文件访问
     getPublicFile: fileService.getPublicFile,
@@ -152,13 +157,12 @@ export const api = {
   },
 
   user: {
-    // API密钥用户的文本服务
+    // API密钥用户的文本服务（统一接口）
     paste: {
-      getPastes: pasteService.getUserPastes,
-      getPasteById: pasteService.getUserPasteById,
-      updatePaste: pasteService.updateUserPaste,
-      deletePaste: pasteService.deleteUserPaste,
-      deletePastes: pasteService.deleteUserPastes,
+      getPastes: pasteService.getPastes,
+      getPasteById: pasteService.getPasteById,
+      updatePaste: pasteService.updatePaste,
+      batchDeletePastes: pasteService.batchDeletePastes,
     },
 
     // API密钥用户的挂载服务（只读）
@@ -167,23 +171,22 @@ export const api = {
       getMountById: mountService.getUserMountById,
     },
 
-    // API密钥用户的文件系统服务
+    // API密钥用户的文件系统服务 - 使用统一API
     fs: {
-      getDirectoryList: fsService.getUserDirectoryList,
-      getFileInfo: fsService.getUserFileInfo,
-      getFileDownloadUrl: fsService.getUserFileDownloadUrl,
-      getFileLink: fsService.getUserFileLink,
-      createDirectory: fsService.createUserDirectory,
-      uploadFile: fsService.uploadUserFile,
-      deleteItem: fsService.deleteUserItem,
-      batchDeleteItems: fsService.batchDeleteUserItems,
-      renameItem: fsService.renameUserItem,
-      updateFile: fsService.updateUserFile,
+      getDirectoryList: fsService.getDirectoryList,
+      getFileInfo: fsService.getFileInfo,
+      getFileDownloadUrl: fsService.getFileDownloadUrl,
+      getFileLink: fsService.getFileLink,
+      createDirectory: fsService.createDirectory,
+      uploadFile: fsService.uploadFile,
+      batchDeleteItems: fsService.batchDeleteItems,
+      renameItem: fsService.renameItem,
+      updateFile: fsService.updateFile,
       // 复制相关
-      copyItem: fsService.copyUserItem,
-      batchCopyItems: fsService.batchCopyUserItems,
-      commitBatchCopy: fsService.commitUserBatchCopy,
-      commitCopy: fsService.commitUserCopy,
+      batchCopyItems: fsService.batchCopyItems,
+      commitBatchCopy: fsService.commitBatchCopy,
+      // 分享相关
+      createShareFromFileSystem: fsService.createShareFromFileSystem,
     },
 
     // API密钥用户的URL上传服务

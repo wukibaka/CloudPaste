@@ -125,7 +125,7 @@
 </template>
 
 <script setup>
-import { ref, defineProps, defineEmits, computed, onMounted } from "vue";
+import { ref, defineProps, defineEmits, computed } from "vue";
 import { useI18n } from "vue-i18n";
 import { isOffice as isOfficeFileType } from "../../utils/mimeUtils.js";
 import { api } from "../../api";
@@ -266,32 +266,18 @@ const previewFile = async () => {
         // 获取文件密码
         const filePassword = getFilePassword();
 
-        // 构建API URL - 使用完整的后端URL
-        let apiUrl = getFullApiUrl(`office-preview/${slug}`);
-        if (filePassword) {
-          apiUrl += `?password=${encodeURIComponent(filePassword)}`;
-        }
-
-        // 请求获取直接URL
-        const response = await fetch(apiUrl);
-        if (!response.ok) {
-          const errorData = await response.json();
-          showError(
-            t("fileView.actions.previewFailed"),
-            `${t("fileView.actions.getPreviewUrlFailed")}: ${errorData.error || response.statusText}`,
-            t("fileView.actions.retry"),
-            () => emit("refresh-file-info")
+        try {
+          // 使用统一的预览服务
+          officePreviewUrl = await api.preview.getOfficePreviewUrl(slug, {
+            password: filePassword,
+            provider: "microsoft",
+          });
+        } catch (error) {
+          showError(t("fileView.actions.previewFailed"), `${t("fileView.actions.getPreviewUrlFailed")}: ${error.message}`, t("fileView.actions.retry"), () =>
+            emit("refresh-file-info")
           );
           return;
         }
-
-        const data = await response.json();
-        if (!data.url) {
-          showError(t("fileView.actions.previewFailed"), t("fileView.actions.noUrlInResponse"), t("fileView.actions.retry"), () => emit("refresh-file-info"));
-          return;
-        }
-
-        officePreviewUrl = `https://view.officeapps.live.com/op/view.aspx?src=${encodeURIComponent(data.url)}`;
       } else {
         // S3直链模式：直接使用previewUrl
         console.log("Office文件预览 - S3直链模式");
@@ -511,16 +497,21 @@ const deleteFile = async () => {
   try {
     let response;
 
-    // 根据用户类型选择合适的 API 函数
-    if (isAdmin.value) {
-      response = await api.file.deleteFile(props.fileInfo.id);
-    } else if (hasApiKey.value && hasFilePermission.value && isCreator.value) {
-      response = await api.file.deleteUserFile(props.fileInfo.id);
+    // 使用统一的批量删除 API
+    if (isAdmin.value || (hasApiKey.value && hasFilePermission.value && isCreator.value)) {
+      response = await api.file.batchDeleteFiles([props.fileInfo.id]);
     } else {
       throw new Error(t("fileView.actions.noPermission"));
     }
 
     if (response.success) {
+      // 检查批量删除结果
+      if (response.data && response.data.failed && response.data.failed.length > 0) {
+        // 删除失败
+        const failedItem = response.data.failed[0];
+        throw new Error(failedItem.error || "删除失败");
+      }
+
       // 关闭确认对话框
       showDeleteConfirm.value = false;
       // 通知父组件文件已删除

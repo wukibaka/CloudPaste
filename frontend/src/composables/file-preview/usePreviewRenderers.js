@@ -208,14 +208,13 @@ export function usePreviewRenderers(file, authInfo, emit, darkMode) {
       const directUrl = await getOfficeDirectUrlForPreview();
 
       if (directUrl) {
-        // 确保URL是完整的绝对URL，并且对URL进行编码
-        const encodedUrl = encodeURIComponent(directUrl);
+        // 使用统一的预览服务
+        const { getOfficePreviewUrl } = await import("../../api/services/previewService");
+        const previewUrls = await getOfficePreviewUrl({ directUrl }, { returnAll: true });
 
-        // 设置Microsoft Office Online Viewer URL
-        microsoftOfficePreviewUrl.value = `https://view.officeapps.live.com/op/view.aspx?src=${encodedUrl}`;
-
-        // 设置Google Docs Viewer URL
-        googleDocsPreviewUrl.value = `https://docs.google.com/viewer?url=${encodedUrl}&embedded=true`;
+        // 设置预览URL
+        microsoftOfficePreviewUrl.value = previewUrls.microsoft;
+        googleDocsPreviewUrl.value = previewUrls.google;
 
         console.log("Office预览URL生成成功", {
           microsoft: microsoftOfficePreviewUrl.value.substring(0, 100) + "...",
@@ -855,11 +854,9 @@ ${textContent.value}
           isTextLoading.value = false;
         }
 
-
         //使用S3预签名URL
         if (typeChecks.isImage || typeChecks.isVideo || typeChecks.isAudio || typeChecks.isPdf) {
           authenticatedPreviewUrl.value = previewUrl.value;
-
         }
 
         // 如果是Office文件，更新Office预览URL

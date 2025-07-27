@@ -80,6 +80,11 @@ export async function getUploadPresignedUrl(options) {
       path: options.path,
       slug: options.slug,
       size: options.size,
+      remark: options.remark,
+      password: options.password,
+      expires_in: options.expires_in,
+      max_views: options.max_views,
+      use_proxy: options.use_proxy,
     };
 
     return await post("s3/presign", data);
@@ -126,6 +131,11 @@ export async function directUploadFile(file, options, onProgress, onXhrReady, on
       path: options.path,
       slug: options.slug,
       size: file.size, // 传递文件大小供后端验证
+      remark: options.remark,
+      password: options.password,
+      expires_in: options.expires_in,
+      max_views: options.max_views,
+      use_proxy: options.use_proxy,
     });
 
     if (!presignedData.success) {
@@ -137,10 +147,10 @@ export async function directUploadFile(file, options, onProgress, onXhrReady, on
         }
         // 判断是否是存储容量不足的错误
         else if (
-          presignedData.message.includes("存储空间不足") ||
-          presignedData.message.includes("insufficient storage") ||
-          presignedData.message.includes("exceed") ||
-          presignedData.message.includes("容量")
+            presignedData.message.includes("存储空间不足") ||
+            presignedData.message.includes("insufficient storage") ||
+            presignedData.message.includes("exceed") ||
+            presignedData.message.includes("容量")
         ) {
           throw new Error(`存储空间不足: ${presignedData.message}`);
         }
@@ -168,23 +178,33 @@ export async function directUploadFile(file, options, onProgress, onXhrReady, on
     const uploadResult = await new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
 
+      // 添加清理函数防止内存泄漏
+      const cleanup = () => {
+        if (xhr.upload) {
+          xhr.upload.removeEventListener("progress", progressHandler);
+        }
+        xhr.removeEventListener("load", loadHandler);
+        xhr.removeEventListener("error", errorHandler);
+        xhr.removeEventListener("abort", abortHandler);
+      };
+
       // 传递XHR实例给父组件，以支持取消上传
       if (typeof onXhrReady === "function") {
         onXhrReady(xhr);
       }
 
-      // 设置进度监听
-      xhr.upload.addEventListener("progress", (event) => {
+      // 定义事件处理器，便于清理
+      const progressHandler = (event) => {
         if (event.lengthComputable) {
           const progress = Math.round((event.loaded / event.total) * 100);
           if (typeof onProgress === "function") {
             onProgress(progress, event.loaded, event.total);
           }
         }
-      });
+      };
 
-      // 设置完成监听
-      xhr.addEventListener("load", () => {
+      const loadHandler = () => {
+        cleanup();
         if (xhr.status >= 200 && xhr.status < 300) {
           // 获取ETag (S3返回的文件标识符)
           const etag = xhr.getResponseHeader("ETag");
@@ -197,16 +217,24 @@ export async function directUploadFile(file, options, onProgress, onXhrReady, on
           console.error("上传失败，状态码:", xhr.status, "响应:", xhr.responseText);
           reject(new Error(`上传失败: ${xhr.status} ${xhr.statusText}`));
         }
-      });
+      };
 
-      xhr.addEventListener("error", (e) => {
+      const errorHandler = (e) => {
+        cleanup();
         console.error("上传错误:", e);
         reject(new Error("上传过程中发生网络错误"));
-      });
+      };
 
-      xhr.addEventListener("abort", () => {
+      const abortHandler = () => {
+        cleanup();
         reject(new Error("上传被取消"));
-      });
+      };
+
+      // 设置事件监听
+      xhr.upload.addEventListener("progress", progressHandler);
+      xhr.addEventListener("load", loadHandler);
+      xhr.addEventListener("error", errorHandler);
+      xhr.addEventListener("abort", abortHandler);
 
       // 配置请求
       xhr.open("PUT", upload_url, true);
@@ -262,18 +290,13 @@ export async function directUploadFile(file, options, onProgress, onXhrReady, on
       console.log("上传失败，正在删除文件记录:", fileId);
       try {
         // 使用认证Store检查用户身份
-        const { useAuthStore } = await import("../../stores/authStore.js");
+        const { useAuthStore } = await import("@/stores/authStore.js");
         const authStore = useAuthStore();
 
-        // 根据用户身份选择合适的删除API
-        if (authStore.isAdmin) {
-          // 使用管理员API删除文件
-          await deleteAdminFile(fileId);
-          console.log("已成功删除上传失败的文件记录（管理员API）");
-        } else if (authStore.authType === "apikey" && authStore.apiKey) {
-          // 使用用户API删除文件
-          await deleteUserFile(fileId);
-          console.log("已成功删除上传失败的文件记录（用户API）");
+        // 使用统一的批量删除API删除文件
+        if (authStore.isAdmin || (authStore.authType === "apikey" && authStore.apiKey)) {
+          await batchDeleteFiles([fileId]);
+          console.log("已成功删除上传失败的文件记录（统一API）");
         } else {
           console.warn("未检测到有效的管理员令牌或API密钥，无法删除文件记录");
         }
@@ -288,87 +311,48 @@ export async function directUploadFile(file, options, onProgress, onXhrReady, on
 }
 
 /******************************************************************************
- * 管理员文件管理API
+ * 统一文件管理API
  ******************************************************************************/
 
 /**
- * 获取管理员文件列表
+ * 获取文件列表（统一接口，自动根据认证信息处理）
  * @param {number} limit - 每页条数
  * @param {number} offset - 偏移量
+ * @param {Object} options - 额外查询选项（管理员可用）
  * @returns {Promise<Object>} 文件列表响应
  */
-export async function getAdminFiles(limit = 50, offset = 0) {
-  return await get(`admin/files?limit=${limit}&offset=${offset}`);
+export async function getFiles(limit = 50, offset = 0, options = {}) {
+  const params = { limit, offset, ...options };
+  return await get("files", { params });
 }
 
 /**
- * 获取管理员单个文件详情
+ * 获取单个文件详情（统一接口，自动根据认证信息处理）
  * @param {string} id - 文件ID
  * @returns {Promise<Object>} 文件详情响应
  */
-export async function getAdminFile(id) {
-  return await get(`admin/files/${id}`);
+export async function getFile(id) {
+  return await get(`files/${id}`);
 }
 
 /**
- * 更新管理员文件元数据
+ * 更新文件元数据（统一接口，自动根据认证信息处理）
  * @param {string} id - 文件ID
  * @param {Object} metadata - 更新的文件元数据
  * @returns {Promise<Object>} 更新响应
  */
-export async function updateAdminFile(id, metadata) {
-  return await put(`admin/files/${id}`, metadata);
+export async function updateFile(id, metadata) {
+  return await put(`files/${id}`, metadata);
 }
 
 /**
- * 删除管理员文件
- * @param {string} id - 文件ID
- * @returns {Promise<Object>} 删除响应
+ * 批量删除文件（统一接口，自动根据认证信息处理）
+ * @param {Array<string>} ids - 文件ID数组
+ * @param {string} deleteMode - 删除模式：'record_only' 仅删除记录，'both' 同时删除文件（默认）
+ * @returns {Promise<Object>} 批量删除响应
  */
-export async function deleteAdminFile(id) {
-  return await del(`admin/files/${id}`);
-}
-
-/******************************************************************************
- * API密钥用户文件管理API
- ******************************************************************************/
-
-/**
- * 获取API密钥用户的文件列表
- * @param {number} limit - 每页条数
- * @param {number} offset - 偏移量
- * @returns {Promise<Object>} 文件列表响应
- */
-export async function getUserFiles(limit = 50, offset = 0) {
-  return await get(`user/files?limit=${limit}&offset=${offset}`);
-}
-
-/**
- * 获取API密钥用户的单个文件详情
- * @param {string} id - 文件ID
- * @returns {Promise<Object>} 文件详情响应
- */
-export async function getUserFile(id) {
-  return await get(`user/files/${id}`);
-}
-
-/**
- * 更新API密钥用户的文件元数据
- * @param {string} id - 文件ID
- * @param {Object} metadata - 更新的文件元数据
- * @returns {Promise<Object>} 更新响应
- */
-export async function updateUserFile(id, metadata) {
-  return await put(`user/files/${id}`, metadata);
-}
-
-/**
- * 删除API密钥用户的文件
- * @param {string} id - 文件ID
- * @returns {Promise<Object>} 删除响应
- */
-export async function deleteUserFile(id) {
-  return await del(`user/files/${id}`);
+export async function batchDeleteFiles(ids, deleteMode = "both") {
+  return await del(`files/batch-delete`, { ids, delete_mode: deleteMode });
 }
 
 /******************************************************************************
@@ -393,9 +377,3 @@ export async function getPublicFile(slug) {
 export async function verifyFilePassword(slug, password) {
   return await post(`public/files/${slug}/verify`, { password });
 }
-
-// 兼容性导出 - 保持向后兼容
-export const getFiles = getAdminFiles;
-export const getFile = getAdminFile;
-export const updateFile = updateAdminFile;
-export const deleteFile = deleteAdminFile;

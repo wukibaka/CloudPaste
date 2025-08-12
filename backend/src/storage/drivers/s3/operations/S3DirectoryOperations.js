@@ -4,11 +4,12 @@
  */
 
 import { HTTPException } from "hono/http-exception";
-import { ApiStatus } from "../../../../constants/index.js";
+import { ApiStatus, FILE_TYPES, FILE_TYPE_NAMES } from "../../../../constants/index.js";
 import { S3Client, ListObjectsV2Command, PutObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
 import { checkDirectoryExists, updateParentDirectoriesModifiedTime } from "../utils/S3DirectoryUtils.js";
-import { directoryCacheManager, clearCache } from "../../../../utils/DirectoryCache.js";
+import { directoryCacheManager, clearDirectoryCache } from "../../../../cache/index.js";
 import { handleFsError } from "../../../fs/utils/ErrorHandler.js";
+import { GetFileType, getFileTypeName } from "../../../../utils/fileTypeDetector.js";
 
 export class S3DirectoryOperations {
   /**
@@ -102,7 +103,7 @@ export class S3DirectoryOperations {
    * @returns {Promise<Object>} 目录内容
    */
   async listDirectory(s3SubPath, options = {}) {
-    const { mount, subPath } = options;
+    const { mount, subPath, db } = options;
 
     return handleFsError(
       async () => {
@@ -192,6 +193,8 @@ export class S3DirectoryOperations {
                 isVirtual: false,
                 size: directorySize,
                 modified: directoryModified,
+                type: FILE_TYPES.FOLDER, // 目录类型常量 (1)
+                typeName: FILE_TYPE_NAMES[FILE_TYPES.FOLDER], // "folder"
               });
             }
           }
@@ -225,6 +228,8 @@ export class S3DirectoryOperations {
             // 构建子项路径 - 确保路径正确拼接，避免双斜杠
             const separator = subPath.endsWith("/") ? "" : "/";
             const itemPath = mount.mount_path + subPath + separator + relativePath;
+            const fileType = await GetFileType(relativePath, db);
+            const fileTypeName = await getFileTypeName(relativePath, db);
 
             result.items.push({
               name: relativePath,
@@ -233,6 +238,8 @@ export class S3DirectoryOperations {
               size: content.Size,
               modified: content.LastModified ? content.LastModified.toISOString() : new Date().toISOString(),
               etag: content.ETag ? content.ETag.replace(/"/g, "") : undefined,
+              type: fileType, // 整数类型常量 (0-6)
+              typeName: fileTypeName, // 类型名称（用于调试）
             });
           }
         }
@@ -277,7 +284,7 @@ export class S3DirectoryOperations {
 
         // 清除缓存，因为目录结构已变更
         if (mount && mount.id && subPath !== "/") {
-          await clearCache({ mountId: mount.id });
+          await clearDirectoryCache({ mountId: mount.id });
           console.log(`已清理挂载点 ${mount.id} 的缓存`);
         }
 
@@ -452,6 +459,8 @@ export class S3DirectoryOperations {
         contentType: "application/x-directory",
         mount_id: mount.id,
         storage_type: mount.storage_type,
+        type: FILE_TYPES.FOLDER, // 目录类型常量 (1)
+        typeName: FILE_TYPE_NAMES[FILE_TYPES.FOLDER], // "folder"
       };
     }
 
@@ -486,6 +495,8 @@ export class S3DirectoryOperations {
         contentType: "application/x-directory",
         mount_id: mount.id,
         storage_type: mount.storage_type,
+        type: FILE_TYPES.FOLDER, // 目录类型常量 (1)
+        typeName: FILE_TYPE_NAMES[FILE_TYPES.FOLDER], // "folder"
       };
     }
 

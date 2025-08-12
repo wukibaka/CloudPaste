@@ -6,16 +6,18 @@
 import { useGlobalMessage } from "./core/useGlobalMessage.js";
 
 // ===== 文件预览功能 =====
-import { usePreviewTypes } from "./file-preview/usePreviewTypes.js";
 import { usePreviewRenderers } from "./file-preview/usePreviewRenderers.js";
 import { useFilePreviewExtensions } from "./file-preview/useFilePreviewExtensions.js";
 import { useFilePreview } from "./file-preview/useFilePreview.js";
 
+// ===== 压缩文件功能 =====
+import { useArchivePreview } from "./archive/useArchivePreview.js";
+
 // ===== 文件系统功能 =====
 import { useFileOperations } from "./file-system/useFileOperations.js";
-import { useFileUpload } from "./file-system/useFileUpload.js";
 import { useDirectorySort } from "./file-system/useDirectorySort.js";
 import { useFileBasket } from "./file-system/useFileBasket.js";
+import { useFileSave } from "./file-system/useFileSave.js";
 
 // ===== UI交互功能 =====
 import { useSelection } from "./ui-interaction/useSelection.js";
@@ -26,14 +28,14 @@ import { usePhotoSwipe } from "./ui-interaction/usePhotoSwipe.js";
 // 重新导出所有功能
 export {
   useGlobalMessage,
-  usePreviewTypes,
   usePreviewRenderers,
   useFilePreviewExtensions,
   useFilePreview,
+  useArchivePreview,
   useFileOperations,
-  useFileUpload,
   useDirectorySort,
   useFileBasket,
+  useFileSave,
   useSelection,
   useUIState,
   useGalleryView,
@@ -47,10 +49,10 @@ export {
  * 导出文件预览相关的所有功能
  */
 export const FilePreviewComposables = {
-  usePreviewTypes,
   usePreviewRenderers,
   useFilePreviewExtensions,
   useFilePreview,
+  useArchivePreview,
 };
 
 /**
@@ -59,9 +61,9 @@ export const FilePreviewComposables = {
  */
 export const FileSystemComposables = {
   useFileOperations,
-  useFileUpload,
   useDirectorySort,
   useFileBasket,
+  useFileSave,
 };
 
 /**
@@ -148,12 +150,10 @@ export const SORT_CONFIG = {
 // ===== 默认导出 =====
 export default {
   // 单独的组合函数
-  usePreviewTypes,
   usePreviewRenderers,
   useFilePreviewExtensions,
   useFilePreview,
   useFileOperations,
-  useFileUpload,
   useDirectorySort,
   useFileBasket,
   useSelection,

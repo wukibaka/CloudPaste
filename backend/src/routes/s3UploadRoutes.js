@@ -1,7 +1,16 @@
 import { Hono } from "hono";
 import { DbTables } from "../constants/index.js";
 import { ApiStatus } from "../constants/index.js";
-import { createErrorResponse, generateFileId, generateShortId, getSafeFileName, getFileNameAndExt, formatFileSize, generateUniqueFileSlug } from "../utils/common.js";
+import {
+  createErrorResponse,
+  generateFileId,
+  generateShortId,
+  getSafeFileName,
+  getFileNameAndExt,
+  formatFileSize,
+  generateUniqueFileSlug,
+  shouldUseRandomSuffix,
+} from "../utils/common.js";
 import { getMimeTypeFromFilename } from "../utils/fileUtils.js";
 import { generatePresignedPutUrl, buildS3Url, deleteFileFromS3, generatePresignedUrl, createS3Client } from "../utils/s3Utils.js";
 import { authGateway } from "../middlewares/authGatewayMiddleware.js";
@@ -9,7 +18,7 @@ import { hashPassword } from "../utils/crypto.js";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { S3ProviderTypes } from "../constants/index.js";
 import { ConfiguredRetryStrategy } from "@smithy/util-retry";
-import { directoryCacheManager, clearCache } from "../utils/DirectoryCache.js";
+import { directoryCacheManager, clearDirectoryCache } from "../cache/index.js";
 import { updateParentDirectoriesModifiedTimeHelper } from "../storage/drivers/s3/utils/S3DirectoryUtils.js";
 import { RepositoryFactory } from "../repositories/index.js";
 import { FileShareService } from "../services/fileShareService.js";
@@ -70,14 +79,14 @@ app.post("/api/s3/presign", authGateway.requireFile(), async (c) => {
           }
 
           // 删除旧文件的数据库记录
-          await fileRepository.deleteById(existingFile.id);
+          await fileRepository.deleteFile(existingFile.id);
 
           // 删除关联的密码记录（如果有）
           await fileRepository.deleteFilePasswordRecord(existingFile.id);
 
           // 清除与文件相关的缓存 - 使用统一的clearCache函数（仅对S3存储类型）
           if (existingFile.storage_type === "S3") {
-            await clearCache({ db, s3ConfigId: existingFile.storage_config_id });
+            await clearDirectoryCache({ db, s3ConfigId: existingFile.storage_config_id });
           }
         } catch (deleteError) {
           console.error(`删除旧文件记录时出错: ${deleteError.message}`);
@@ -284,7 +293,7 @@ app.put("/api/upload-direct/:filename", authGateway.requireFile(), async (c) => 
     // 获取系统最大上传限制
     const repositoryFactory = new RepositoryFactory(db);
     const systemRepository = repositoryFactory.getSystemRepository();
-    const maxUploadSizeResult = await systemRepository.getSetting("max_upload_size");
+    const maxUploadSizeResult = await systemRepository.getSettingMetadata("max_upload_size");
 
     const maxUploadSizeMB = maxUploadSizeResult ? parseInt(maxUploadSizeResult.value) : DEFAULT_MAX_UPLOAD_SIZE_MB;
     const maxUploadSizeBytes = maxUploadSizeMB * 1024 * 1024;
@@ -391,14 +400,14 @@ app.put("/api/upload-direct/:filename", authGateway.requireFile(), async (c) => 
           }
 
           // 删除旧文件的数据库记录
-          await fileRepository.deleteById(existingFile.id);
+          await fileRepository.deleteFile(existingFile.id);
 
           // 删除关联的密码记录（如果有）
           await fileRepository.deleteFilePasswordRecord(existingFile.id);
 
-          // 清除与文件相关的缓存 - 使用统一的clearCache函数（仅对S3存储类型）
+          // 清除与文件相关的缓存 - 使用统一的clearDirectoryCache函数（仅对S3存储类型）
           if (existingFile.storage_type === "S3") {
-            await clearCache({ db, s3ConfigId: existingFile.storage_config_id });
+            await clearDirectoryCache({ db, s3ConfigId: existingFile.storage_config_id });
           }
         } catch (deleteError) {
           console.error(`删除旧文件记录时出错: ${deleteError.message}`);
@@ -425,20 +434,27 @@ app.put("/api/upload-direct/:filename", authGateway.requireFile(), async (c) => 
     const { name: fileName, ext: fileExt } = getFileNameAndExt(filename);
     const safeFileName = getSafeFileName(fileName).substring(0, 50); // 限制长度
 
-    // 生成短ID
-    const shortId = generateShortId();
+    // 根据系统设置或用户参数决定文件命名策略
+    let useRandomSuffix;
+    if (useOriginalFilename !== undefined) {
+      // 用户明确指定了是否使用原始文件名
+      useRandomSuffix = !useOriginalFilename;
+    } else {
+      // 使用系统设置
+      useRandomSuffix = await shouldUseRandomSuffix(db);
+    }
 
     // 组合最终路径
+    const folderPath = s3Config.default_folder ? (s3Config.default_folder.endsWith("/") ? s3Config.default_folder : s3Config.default_folder + "/") : "";
+
     let storagePath;
-    if (authType === "apikey") {
-      // 对于API密钥用户，使用简化的路径处理
-      // 存储操作不需要挂载点权限检查，直接使用默认文件夹
-      const folderPath = s3Config.default_folder ? (s3Config.default_folder.endsWith("/") ? s3Config.default_folder : s3Config.default_folder + "/") : "";
-      storagePath = folderPath + customPath + (useOriginalFilename ? "" : shortId + "-") + safeFileName + fileExt;
+    if (useRandomSuffix) {
+      // 使用随机后缀避免冲突，格式为 filename-shortId.ext
+      const shortId = generateShortId();
+      storagePath = folderPath + customPath + safeFileName + "-" + shortId + fileExt;
     } else {
-      // 对于管理员用户，使用默认文件夹
-      const folderPath = s3Config.default_folder ? (s3Config.default_folder.endsWith("/") ? s3Config.default_folder : s3Config.default_folder + "/") : "";
-      storagePath = folderPath + customPath + (useOriginalFilename ? "" : shortId + "-") + safeFileName + fileExt;
+      // 使用原始文件名（可能冲突）
+      storagePath = folderPath + customPath + safeFileName + fileExt;
     }
 
     // 获取加密密钥
@@ -611,7 +627,7 @@ app.put("/api/upload-direct/:filename", authGateway.requireFile(), async (c) => 
     await updateParentDirectoriesModifiedTimeHelper(s3Config, storagePath, encryptionSecret);
 
     // 清除与文件相关的缓存 - 使用统一的clearCache函数
-    await clearCache({ db, s3ConfigId });
+    await clearDirectoryCache({ db, s3ConfigId });
 
     // 生成预签名URL，使用S3配置的默认时效，传递MIME类型以确保正确的Content-Type
     // 注意：文件上传完成后生成的URL用于分享，没有特定用户上下文，禁用缓存

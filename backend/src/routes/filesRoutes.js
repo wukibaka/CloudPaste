@@ -15,7 +15,7 @@ import {
   incrementAndCheckFileViews,
   getPublicFileInfo,
 } from "../services/fileService.js";
-import { clearCache } from "../utils/DirectoryCache.js";
+import { clearDirectoryCache } from "../cache/index.js";
 import { authGateway } from "../middlewares/authGatewayMiddleware.js";
 import { RepositoryFactory } from "../repositories/index.js";
 
@@ -117,7 +117,7 @@ app.get("/api/public/files/:slug", async (c) => {
           if (fileStillExists) {
             console.log(`文件(${file.id})达到最大访问次数但未被删除，再次尝试删除...`);
             // 导入并使用 checkAndDeleteExpiredFile 函数
-            const { checkAndDeleteExpiredFile } = await import("../routes/fileViewRoutes.js");
+            const { checkAndDeleteExpiredFile } = await import("../services/fileViewService.js");
             await checkAndDeleteExpiredFile(db, result.file, encryptionSecret);
           }
         } catch (error) {
@@ -130,7 +130,7 @@ app.get("/api/public/files/:slug", async (c) => {
       const urlsObj = await generateFileDownloadUrl(db, result.file, encryptionSecret, c.req.raw);
 
       // 构建公开信息
-      const publicInfo = getPublicFileInfo(result.file, requiresPassword, urlsObj);
+      const publicInfo = await getPublicFileInfo(result.file, requiresPassword, urlsObj);
 
       return c.json({
         code: ApiStatus.SUCCESS,
@@ -140,7 +140,7 @@ app.get("/api/public/files/:slug", async (c) => {
       });
     } else {
       // 文件需要密码验证，只返回基本信息
-      const publicInfo = getPublicFileInfo(file, true);
+      const publicInfo = await getPublicFileInfo(file, true);
 
       return c.json({
         code: ApiStatus.SUCCESS,
@@ -211,7 +211,7 @@ app.post("/api/public/files/:slug/verify", async (c) => {
         if (fileStillExists) {
           console.log(`文件(${file.id})达到最大访问次数但未被删除，再次尝试删除...`);
           // 导入并使用 checkAndDeleteExpiredFile 函数
-          const { checkAndDeleteExpiredFile } = await import("../routes/fileViewRoutes.js");
+          const { checkAndDeleteExpiredFile } = await import("../services/fileViewService.js");
           await checkAndDeleteExpiredFile(db, result.file, encryptionSecret);
         }
       } catch (error) {
@@ -238,8 +238,8 @@ app.post("/api/public/files/:slug/verify", async (c) => {
       }
     }
 
-    // 使用getPublicFileInfo函数构建完整的响应，包括代理链接
-    const publicInfo = getPublicFileInfo(fileWithPassword, false, urlsObj);
+    // 使用getPublicFileInfo函数构建完整的响应，包括代理链接和type字段
+    const publicInfo = await getPublicFileInfo(fileWithPassword, false, urlsObj);
 
     return c.json({
       code: ApiStatus.SUCCESS,
@@ -271,10 +271,12 @@ app.get("/api/files", unifiedAuth, async (c) => {
       // 管理员：获取查询参数
       const limit = parseInt(c.req.query("limit") || "30");
       const offset = parseInt(c.req.query("offset") || "0");
+      const search = c.req.query("search");
       const createdBy = c.req.query("created_by");
 
       // 构建查询选项
       const options = { limit, offset };
+      if (search) options.search = search;
       if (createdBy) options.createdBy = createdBy;
 
       // 使用管理员服务获取文件列表
@@ -283,9 +285,14 @@ app.get("/api/files", unifiedAuth, async (c) => {
       // API密钥用户：获取查询参数
       const limit = parseInt(c.req.query("limit") || "30");
       const offset = parseInt(c.req.query("offset") || "0");
+      const search = c.req.query("search");
+
+      // 构建查询选项
+      const options = { limit, offset };
+      if (search) options.search = search;
 
       // 使用用户服务获取文件列表
-      result = await getUserFileList(db, userId, { limit, offset });
+      result = await getUserFileList(db, userId, options);
     }
 
     const response = {
@@ -457,7 +464,7 @@ app.delete("/api/files/batch-delete", unifiedAuth, async (c) => {
   // 清除与文件相关的缓存
   try {
     for (const s3ConfigId of s3ConfigIds) {
-      await clearCache({ db, s3ConfigId });
+      await clearDirectoryCache({ db, s3ConfigId });
     }
     console.log(`批量删除操作完成后缓存已刷新：${s3ConfigIds.size} 个S3配置`);
   } catch (cacheError) {

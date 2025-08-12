@@ -133,6 +133,9 @@
    - `S3_BUCKET_NAME`
    - `S3_ENDPOINT`
 
+**以下教程可能过时 具体参考： [Cloudpaste在线部署文档](https://doc.cloudpaste.qzz.io)**
+
+
 <details>
 <summary><b>👉 查看完整部署教程</b></summary>
 
@@ -800,7 +803,7 @@ CloudPaste 提供简易的 WebDAV 协议支持，允许您将存储空间挂载�
    - Basic 认证（用户名+密码）
 - **支持的权限类型**:
    - 管理员账户 - 拥有完整操作权限
-   - API 密钥 - 需启用挂载权限（mount_permission）
+   - API 密钥 - 按需启用
 
 ### 权限配置
 
@@ -872,11 +875,8 @@ location /dav {
 
 3. **⚠️⚠️ Webdav 上传问题**:
 
-   - 预签名上传模式下，需要注意配置对应的 S3 存储的跨域配置
-   - WebDav 的自动推荐模式下，小于 10MB 文件采用直传模式，10-50MB 文件采用分片上传模式，大于 50MB 文件采用预签名上传模式。
-   - 关于 Cloudflare 的 Worker 上传限制，建议使用预签名或直传模式，不要使用分片
+   - Worker部署的建议使用直传模式（理论单次最高5GB），避免使用分片（受CPU限制）
    - 对于 Docker 部署，只需注意 nginx 代理配置，上传模式任意。
-   - Windows，Raidrive 等客户端挂载暂不支持拖动上传
 
 </details>
 

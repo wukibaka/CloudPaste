@@ -127,13 +127,12 @@
 <script setup>
 import { ref, defineProps, defineEmits, computed } from "vue";
 import { useI18n } from "vue-i18n";
-import { isOffice as isOfficeFileType } from "../../utils/mimeUtils.js";
-import { api } from "../../api";
+import { api } from "@/api";
 import { ApiStatus } from "../../api/ApiStatus";
-import { getFullApiUrl } from "../../api/config";
 import { copyToClipboard } from "@/utils/clipboard";
 import ErrorToast from "../common/ErrorToast.vue";
-import { useAuthStore } from "../../stores/authStore.js";
+import { useAuthStore } from "@/stores/authStore.js";
+import { FileType } from "@/utils/fileTypes.js";
 
 const { t } = useI18n();
 
@@ -202,11 +201,9 @@ const isCreator = computed(() => {
   return authStore.isFileCreator(props.fileInfo);
 });
 
-// 认证信息已由认证Store管理，不需要额外的验证逻辑
-
-// 辅助函数：获取文件密码（按优先级顺序）
+// 辅助函数：获取文件密码
 const getFilePassword = () => {
-  // 1. 优先使用文件信息中存储的已验证密码（最可靠）
+  // 1. 优先使用文件信息中存储的已验证密码
   if (props.fileInfo.currentPassword) {
     console.log("使用已验证的密码");
     return props.fileInfo.currentPassword;
@@ -223,7 +220,7 @@ const getFilePassword = () => {
     console.error("从会话存储获取密码出错:", err);
   }
 
-  // 3. 最后尝试从URL获取密码参数（可能不安全，但为了兼容性保留）
+  // 3. 最后尝试从URL获取密码参数
   try {
     const currentUrl = new URL(window.location.href);
     const passwordParam = currentUrl.searchParams.get("password");
@@ -246,36 +243,41 @@ const previewFile = async () => {
   if (!props.fileUrls.previewUrl) return;
 
   try {
-    // 首先判断是否是Office文件
-    const isOffice = isOfficeFileType(props.fileInfo.mimetype, props.fileInfo.filename);
+    // 判断是否是需要Office在线预览的文件
+    const isOffice = props.fileInfo.type === FileType.OFFICE;
+    const needsOfficePreview = isOffice;
 
-    // 如果是Office文件，需要特殊处理
-    if (isOffice) {
+    // 如果是需要Office在线预览的文件，需要特殊处理
+    if (needsOfficePreview) {
       let officePreviewUrl;
 
-      // 判断是代理URL还是S3直链
-      if (props.fileUrls.previewUrl.includes("/api/file-view/")) {
-        // Worker代理模式：文件需要通过我们的API获取直接URL
+      // 使用统一的文件分享API处理Office预览
+      const urlInfo = api.fileView.parseFileShareUrl(props.fileUrls.previewUrl);
+      if (urlInfo.isFileShare) {
+        // Worker代理模式：通过API获取Office预览URL
         console.log("Office文件预览 - Worker代理模式");
 
-        // 从URL中提取slug
-        const urlParts = props.fileUrls.previewUrl.split("/");
-        const slugWithParams = urlParts[urlParts.length - 1];
-        const slug = slugWithParams.split("?")[0];
-
-        // 获取文件密码
         const filePassword = getFilePassword();
 
         try {
           // 使用统一的预览服务
-          officePreviewUrl = await api.preview.getOfficePreviewUrl(slug, {
+          officePreviewUrl = await api.fileView.getOfficePreviewUrl(urlInfo.slug, {
             password: filePassword,
             provider: "microsoft",
           });
         } catch (error) {
-          showError(t("fileView.actions.previewFailed"), `${t("fileView.actions.getPreviewUrlFailed")}: ${error.message}`, t("fileView.actions.retry"), () =>
-            emit("refresh-file-info")
-          );
+          console.error("Office预览失败:", error);
+
+          // 根据状态码选择合适的错误信息
+          let errorMessage;
+          if (error.status) {
+            const errorKey = api.fileView.getErrorKeyByStatus(error.status);
+            errorMessage = t(errorKey);
+          } else {
+            errorMessage = error.message || t("fileView.errors.serverError");
+          }
+
+          showError(t("fileView.actions.previewFailed"), errorMessage, t("fileView.actions.retry"), () => emit("refresh-file-info"));
           return;
         }
       } else {
@@ -304,36 +306,16 @@ const previewFile = async () => {
     // 检查是否是代理URL并添加密码参数
     let previewUrl = props.fileUrls.previewUrl;
 
-    // 判断是否是代理URL（以/api/file-view/开头）
-    if (previewUrl.includes("/api/file-view/")) {
-      // 检查是否是worker代理模式
-      if (props.fileInfo.use_proxy) {
-        // 从URL中提取slug
-        const urlParts = previewUrl.split("/");
-        const slugWithParams = urlParts[urlParts.length - 1];
-        const slug = slugWithParams.split("?")[0];
+    // 使用统一的文件分享API处理预览URL
+    const urlInfo = api.fileView.parseFileShareUrl(previewUrl);
+    if (urlInfo.isFileShare && urlInfo.type === "preview") {
+      const filePassword = getFilePassword();
 
-        // 获取文件密码
-        const filePassword = getFilePassword();
-
-        // 使用getFullApiUrl构建完整的后端URL
-        previewUrl = getFullApiUrl(`file-view/${slug}`);
-
-        // 如果有密码，添加密码参数
-        if (filePassword) {
-          previewUrl += `?password=${encodeURIComponent(filePassword)}`;
-        }
-      } else {
-        // 获取文件密码
-        const filePassword = getFilePassword();
-
-        // 如果有密码，并且预览URL中还没有包含密码参数
-        if (filePassword && !previewUrl.includes("password=")) {
-          // 添加密码参数到预览URL
-          previewUrl = previewUrl.includes("?") ? `${previewUrl}&password=${encodeURIComponent(filePassword)}` : `${previewUrl}?password=${encodeURIComponent(filePassword)}`;
-
-          console.log("已添加密码参数到预览URL");
-        }
+      // 如果需要密码且URL中没有密码参数，则添加密码参数
+      // 注意：不论是否为代理模式，都直接使用后端返回的URL，只添加密码参数
+      if (filePassword && !urlInfo.password) {
+        previewUrl = api.fileView.addPasswordToUrl(previewUrl, filePassword);
+        console.log("已通过API服务添加密码参数到预览URL");
       }
     }
 
@@ -358,20 +340,17 @@ const downloadFile = () => {
     // 提取文件名，用于下载时的文件命名
     const fileName = props.fileInfo.filename || t("fileView.actions.downloadFile");
 
-    // 检查是否是代理URL并添加密码参数
+    // 使用统一的文件分享API处理下载URL
     let downloadUrl = props.fileUrls.downloadUrl;
 
-    // 判断是否是代理URL（以/api/file-download/开头）
-    if (downloadUrl.includes("/api/file-download/")) {
-      // 获取文件密码
+    // 检查是否为文件分享URL并统一处理
+    const urlInfo = api.fileView.parseFileShareUrl(downloadUrl);
+    if (urlInfo.isFileShare && urlInfo.type === "download") {
       const filePassword = getFilePassword();
-
-      // 如果有密码，并且下载URL中还没有包含密码参数
-      if (filePassword && !downloadUrl.includes("password=")) {
-        // 添加密码参数到下载URL
-        downloadUrl = downloadUrl.includes("?") ? `${downloadUrl}&password=${encodeURIComponent(filePassword)}` : `${downloadUrl}?password=${encodeURIComponent(filePassword)}`;
-
-        console.log("已添加密码参数到下载URL");
+      if (filePassword && !urlInfo.password) {
+        // 使用API服务添加密码参数
+        downloadUrl = api.fileView.addPasswordToUrl(downloadUrl, filePassword);
+        console.log("已通过API服务添加密码参数到下载URL");
       }
     }
 

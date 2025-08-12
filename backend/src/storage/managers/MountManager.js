@@ -2,6 +2,7 @@
  * 挂载管理器
  * 负责管理存储驱动实例的创建、缓存和生命周期
  * 基于挂载点配置动态创建和管理存储驱动
+ *
  */
 
 import { StorageFactory } from "../factory/StorageFactory.js";
@@ -9,6 +10,64 @@ import { HTTPException } from "hono/http-exception";
 import { ApiStatus } from "../../constants/index.js";
 import { findMountPointByPath } from "../fs/utils/MountResolver.js";
 import { StorageConfigUtils } from "../utils/StorageConfigUtils.js";
+
+// 全局驱动缓存 - 永不过期策略，配置更新时主动清理
+const globalDriverCache = new Map();
+const MAX_CACHE_SIZE = 12;
+
+// 缓存统计
+const cacheStats = {
+  hits: 0,
+  misses: 0,
+  errors: 0,
+  cleanups: 0,
+};
+
+/**
+ * 清理所有驱动缓存（手动清理用）
+ * 由于采用永不过期策略，此函数主要用于手动清理或调试
+ */
+function cleanupExpiredDrivers() {
+  // 永不过期策略下，此函数主要用于手动清理
+  // 实际的清理通过配置更新时的主动清理完成
+  console.log(`当前驱动缓存数量: ${globalDriverCache.size}，采用永不过期 + 主动清理策略`);
+  return 0;
+}
+
+/**
+ * LRU清理：当缓存数量超过限制时，清理最久未访问的项
+ * @param {number} targetSize - 目标缓存大小
+ */
+function evictOldestEntries(targetSize = MAX_CACHE_SIZE * 0.8) {
+  if (globalDriverCache.size <= targetSize) return 0;
+
+  // 按最后访问时间排序，找出最久未访问的项
+  const entries = Array.from(globalDriverCache.entries()).sort(([, a], [, b]) => {
+    const aTime = a.lastAccessed || a.timestamp;
+    const bTime = b.lastAccessed || b.timestamp;
+    return aTime - bTime;
+  });
+
+  const toRemove = globalDriverCache.size - targetSize;
+  let removedCount = 0;
+
+  for (let i = 0; i < toRemove && i < entries.length; i++) {
+    const [key, cached] = entries[i];
+    try {
+      cached.driver.cleanup?.();
+    } catch (error) {
+      console.warn(`LRU清理驱动失败 ${key}:`, error.message);
+    }
+    globalDriverCache.delete(key);
+    removedCount++;
+  }
+
+  if (removedCount > 0) {
+    console.log(`🗑️ LRU清理了 ${removedCount} 个最久未访问的驱动缓存`);
+  }
+
+  return removedCount;
+}
 
 export class MountManager {
   /**
@@ -20,16 +79,8 @@ export class MountManager {
     this.db = db;
     this.encryptionSecret = encryptionSecret;
 
-    // 存储驱动实例缓存
-    this.driverCache = new Map();
-
-    // 缓存清理定时器
-    this.cleanupInterval = null;
-    this.cacheTimeout = 30 * 60 * 1000; // 30分钟缓存超时
-    this.cleanupStarted = false; // 标记清理机制是否已启动
-    this.lastCleanupTime = 0; // 上次清理时间
-
-    // 不在构造函数中启动定时器，避免Cloudflare Workers全局作用域限制
+    // 记录管理器创建时间，用于统计
+    this.createdAt = Date.now();
   }
 
   /**
@@ -49,6 +100,11 @@ export class MountManager {
 
     const { mount, subPath } = mountResult;
 
+    // 对API密钥用户验证挂载点S3配置权限
+    if (userType === "apiKey") {
+      await this._validateMountPermissionForApiKey(mount, userIdOrInfo);
+    }
+
     // 获取存储驱动
     const driver = await this.getDriver(mount);
 
@@ -66,34 +122,74 @@ export class MountManager {
    * @returns {Promise<StorageDriver>} 存储驱动实例
    */
   async getDriver(mount) {
-    // 确保清理机制运行
-    this._ensureCleanupTimer();
-
-    const cacheKey = this._generateCacheKey(mount);
-
-    // 检查缓存
-    const cachedDriver = this.driverCache.get(cacheKey);
-    if (cachedDriver && cachedDriver.driver.isInitialized()) {
-      // 更新最后访问时间
-      cachedDriver.lastAccessed = Date.now();
-      console.log(`存储驱动缓存命中: ${mount.storage_type}/${mount.storage_config_id}`);
-      return cachedDriver.driver;
+    // 如果缓存数量超过限制，进行LRU清理
+    if (globalDriverCache.size >= MAX_CACHE_SIZE) {
+      evictOldestEntries();
     }
 
-    // 创建新的驱动实例
-    const driver = await this._createDriver(mount);
+    const cacheKey = `${mount.storage_type}:${mount.storage_config_id}`;
+    const cached = globalDriverCache.get(cacheKey);
 
-    // 缓存驱动实例
-    this.driverCache.set(cacheKey, {
+    // 检查缓存有效性和健康状态（永不过期，只检查健康状态）
+    if (cached) {
+      try {
+        // 轻量级健康检查
+        if (cached.driver.isInitialized()) {
+          cacheStats.hits++;
+          // 更新访问时间（用于LRU）
+          cached.lastAccessed = Date.now();
+          const cacheAge = Math.round((Date.now() - cached.timestamp) / 1000 / 60);
+          console.log(`✅[MountManager]驱动缓存命中: ${cacheKey} (缓存年龄: ${cacheAge}分钟)`);
+          return cached.driver;
+        }
+      } catch (error) {
+        cacheStats.errors++;
+        globalDriverCache.delete(cacheKey);
+      }
+    }
+
+    // 缓存未命中，创建新驱动
+    cacheStats.misses++;
+    const driver = await this._createDriverWithRetry(mount);
+
+    // 缓存新创建的驱动
+    globalDriverCache.set(cacheKey, {
       driver,
+      timestamp: Date.now(),
       lastAccessed: Date.now(),
       mountId: mount.id,
       storageType: mount.storage_type,
-      configId: mount.storage_config_id,
     });
 
-    console.log(`创建新的存储驱动实例: ${mount.storage_type}/${mount.storage_config_id}`);
+    console.log(`🆕[MountManager]创建新驱动: ${cacheKey} (当前缓存数量: ${globalDriverCache.size})`);
     return driver;
+  }
+
+  /**
+   * 创建存储驱动实例（带重试机制）
+   * @private
+   * @param {Object} mount - 挂载点对象
+   * @param {number} maxRetries - 最大重试次数
+   * @returns {Promise<StorageDriver>} 存储驱动实例
+   */
+  async _createDriverWithRetry(mount, maxRetries = 3) {
+    for (let i = 0; i < maxRetries; i++) {
+      try {
+        return await this._createDriver(mount);
+      } catch (error) {
+        const isLastAttempt = i === maxRetries - 1;
+        if (isLastAttempt) {
+          cacheStats.errors++;
+          throw new HTTPException(ApiStatus.INTERNAL_ERROR, {
+            message: `存储驱动创建失败: ${error.message}`,
+          });
+        }
+
+        // 指数退避：1秒、2秒、3秒
+        const delay = 1000 * (i + 1);
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+    }
   }
 
   /**
@@ -123,83 +219,41 @@ export class MountManager {
   }
 
   /**
-   * 生成缓存键
+   * 验证API密钥用户的挂载点权限
+   * 检查挂载点的S3配置是否允许API密钥用户访问
    * @private
    * @param {Object} mount - 挂载点对象
-   * @returns {string} 缓存键
+   * @param {Object} userIdOrInfo - API密钥用户信息
+   * @throws {HTTPException} 当权限不足时抛出异常
    */
-  _generateCacheKey(mount) {
-    return `${mount.storage_type}:${mount.storage_config_id}`;
-  }
+  async _validateMountPermissionForApiKey(mount, userIdOrInfo) {
+    try {
+      // 获取可访问的挂载点列表（已包含S3配置权限过滤）
+      const { authGateway } = await import("../../middlewares/authGatewayMiddleware.js");
+      const accessibleMounts = await authGateway.utils.getAccessibleMounts(this.db, userIdOrInfo, "apiKey");
 
-  /**
-   * 清理过期的驱动实例
-   * @private
-   */
-  _cleanupExpiredDrivers() {
-    const now = Date.now();
-    const expiredKeys = [];
+      // 验证目标挂载点是否在可访问列表中
+      const isAccessible = accessibleMounts.some((accessibleMount) => accessibleMount.id === mount.id);
 
-    for (const [key, cached] of this.driverCache.entries()) {
-      if (now - cached.lastAccessed > this.cacheTimeout) {
-        expiredKeys.push(key);
-      }
-    }
-
-    for (const key of expiredKeys) {
-      const cached = this.driverCache.get(key);
-      if (cached && cached.driver) {
-        // 清理驱动资源
-        cached.driver.cleanup().catch((error) => {
-          console.error(`清理存储驱动失败: ${error.message}`);
+      if (!isAccessible) {
+        console.log(`MountManager权限检查失败: API密钥用户无权限访问挂载点 ${mount.name}`);
+        throw new HTTPException(403, {
+          message: `API密钥用户无权限访问挂载点: ${mount.name}`,
         });
       }
-      this.driverCache.delete(key);
-      console.log(`清理过期存储驱动: ${key}`);
-    }
 
-    if (expiredKeys.length > 0) {
-      console.log(`清理了 ${expiredKeys.length} 个过期存储驱动实例`);
-    }
-  }
+      console.log(`MountManager权限检查通过: API密钥用户可访问挂载点 ${mount.name}`);
+    } catch (error) {
+      // 如果是HTTPException，直接重新抛出
+      if (error instanceof HTTPException) {
+        throw error;
+      }
 
-  /**
-   * 确保清理机制已启动，并执行延迟清理
-   * @private
-   */
-  _ensureCleanupTimer() {
-    if (!this.cleanupStarted) {
-      this.cleanupStarted = true;
-      this._startCleanupTimer();
-    }
-
-    // 检查是否需要执行清理
-    const now = Date.now();
-    if (now - this.lastCleanupTime > 10 * 60 * 1000) {
-      // 10分钟清理一次
-      this.lastCleanupTime = now;
-      this._cleanupExpiredDrivers();
-    }
-  }
-
-  /**
-   * 启动清理定时器
-   * 在Cloudflare Workers环境中，使用延迟清理而不是定时器
-   * @private
-   */
-  _startCleanupTimer() {
-    // 每次操作时检查是否需要清理
-    console.log("挂载管理器清理机制已启动（延迟清理模式）");
-  }
-
-  /**
-   * 停止清理定时器
-   * @private
-   */
-  _stopCleanupTimer() {
-    if (this.cleanupInterval) {
-      clearInterval(this.cleanupInterval);
-      this.cleanupInterval = null;
+      // 其他错误转换为内部服务器错误
+      console.error("MountManager权限检查过程发生错误:", error);
+      throw new HTTPException(500, {
+        message: "权限检查过程发生错误",
+      });
     }
   }
 
@@ -208,21 +262,22 @@ export class MountManager {
    * @param {string} mountId - 挂载点ID
    */
   async clearMountCache(mountId) {
-    const keysToRemove = [];
+    let clearedCount = 0;
 
-    for (const [key, cached] of this.driverCache.entries()) {
+    for (const [key, cached] of globalDriverCache.entries()) {
       if (cached.mountId === mountId) {
-        keysToRemove.push(key);
+        try {
+          await cached.driver.cleanup?.();
+        } catch (error) {
+          console.warn(`清理挂载点驱动失败 ${key}:`, error.message);
+        }
+        globalDriverCache.delete(key);
+        clearedCount++;
       }
     }
 
-    for (const key of keysToRemove) {
-      const cached = this.driverCache.get(key);
-      if (cached && cached.driver) {
-        await cached.driver.cleanup();
-      }
-      this.driverCache.delete(key);
-      console.log(`清理挂载点驱动缓存: ${mountId} -> ${key}`);
+    if (clearedCount > 0) {
+      console.log(`清理挂载点驱动缓存: ${mountId} -> 清理了 ${clearedCount} 个驱动`);
     }
   }
 
@@ -233,51 +288,48 @@ export class MountManager {
    */
   async clearConfigCache(storageType, configId) {
     const cacheKey = `${storageType}:${configId}`;
-    const cached = this.driverCache.get(cacheKey);
+    const cached = globalDriverCache.get(cacheKey);
 
-    if (cached && cached.driver) {
-      await cached.driver.cleanup();
-      this.driverCache.delete(cacheKey);
+    if (cached) {
+      try {
+        await cached.driver.cleanup?.();
+      } catch (error) {
+        console.warn(`清理存储配置驱动失败 ${cacheKey}:`, error.message);
+      }
+      globalDriverCache.delete(cacheKey);
       console.log(`清理存储配置驱动缓存: ${cacheKey}`);
     }
   }
 
   /**
    * 获取缓存统计信息
-   * @returns {Object} 缓存统计
+   * @returns {Object} 缓存统计信息
    */
   getCacheStats() {
-    const stats = {
-      totalCached: this.driverCache.size,
-      byStorageType: {},
-      oldestAccess: null,
-      newestAccess: null,
+    const totalRequests = cacheStats.hits + cacheStats.misses;
+    const hitRate = totalRequests > 0 ? Math.round((cacheStats.hits / totalRequests) * 100) : 0;
+
+    return {
+      totalCached: globalDriverCache.size,
+      maxCacheSize: MAX_CACHE_SIZE,
+      hits: cacheStats.hits,
+      misses: cacheStats.misses,
+      errors: cacheStats.errors,
+      cleanups: cacheStats.cleanups,
+      hitRate: hitRate,
+      cacheUtilization: Math.round((globalDriverCache.size / MAX_CACHE_SIZE) * 100),
+      managerUptime: Math.round((Date.now() - this.createdAt) / 1000 / 60), // 分钟
     };
+  }
 
-    let oldestTime = Date.now();
-    let newestTime = 0;
-
-    for (const [key, cached] of this.driverCache.entries()) {
-      const storageType = cached.storageType;
-      if (!stats.byStorageType[storageType]) {
-        stats.byStorageType[storageType] = 0;
-      }
-      stats.byStorageType[storageType]++;
-
-      if (cached.lastAccessed < oldestTime) {
-        oldestTime = cached.lastAccessed;
-      }
-      if (cached.lastAccessed > newestTime) {
-        newestTime = cached.lastAccessed;
-      }
-    }
-
-    if (this.driverCache.size > 0) {
-      stats.oldestAccess = new Date(oldestTime).toISOString();
-      stats.newestAccess = new Date(newestTime).toISOString();
-    }
-
-    return stats;
+  /**
+   * 手动清理过期驱动缓存
+   * @returns {number} 清理的驱动数量
+   */
+  manualCleanup() {
+    const expiredCount = cleanupExpiredDrivers();
+    const lruCount = evictOldestEntries();
+    return expiredCount + lruCount;
   }
 
   /**
@@ -285,24 +337,35 @@ export class MountManager {
    */
   async clearAllCache() {
     const promises = [];
+    let clearedCount = globalDriverCache.size;
 
-    for (const [key, cached] of this.driverCache.entries()) {
-      if (cached.driver) {
-        promises.push(cached.driver.cleanup());
+    for (const [, cached] of globalDriverCache.entries()) {
+      if (cached.driver?.cleanup) {
+        promises.push(cached.driver.cleanup().catch(() => {}));
       }
     }
 
     await Promise.all(promises);
-    this.driverCache.clear();
-    console.log("已清理所有存储驱动缓存");
+    globalDriverCache.clear();
+
+    if (clearedCount > 0) {
+      console.log(`已清理所有存储驱动缓存: ${clearedCount} 个驱动`);
+    }
   }
 
   /**
    * 销毁管理器
    */
   async destroy() {
-    this._stopCleanupTimer();
+    // 清理所有缓存
     await this.clearAllCache();
+
+    // 重置统计信息
+    cacheStats.hits = 0;
+    cacheStats.misses = 0;
+    cacheStats.errors = 0;
+    cacheStats.cleanups = 0;
+
     console.log("挂载管理器已销毁");
   }
 }

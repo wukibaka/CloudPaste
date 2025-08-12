@@ -8,8 +8,8 @@ export default defineConfig(({ command, mode }) => {
   // 加载环境变量
   const env = loadEnv(mode, process.cwd(), "");
 
-  // 🎯 统一版本管理
-  const APP_VERSION = "0.7.3";
+  // 统一版本管理
+  const APP_VERSION = "0.7.9";
   const isDev = command === "serve";
 
   // 打印环境变量，帮助调试
@@ -46,12 +46,12 @@ export default defineConfig(({ command, mode }) => {
           navigateFallback: "index.html",
           navigateFallbackAllowlist: [/^\/$/, /^\/upload$/, /^\/admin/, /^\/paste\/.+/, /^\/file\/.+/, /^\/mount-explorer/],
 
-          // 🎯 集成自定义Service Worker代码以支持Background Sync API
+          // 集成自定义Service Worker代码以支持Background Sync API
           importScripts: ["/sw-background-sync.js"],
 
-          // 🎯 基于主流PWA最佳实践的正确缓存策略
+          // 基于主流PWA最佳实践的正确缓存策略
           runtimeCaching: [
-            // 📦 应用静态资源 - StaleWhileRevalidate
+            // 应用静态资源 - StaleWhileRevalidate
             {
               urlPattern: ({ request }) => request.destination === "style" || request.destination === "script" || request.destination === "worker",
               handler: "StaleWhileRevalidate",
@@ -67,7 +67,7 @@ export default defineConfig(({ command, mode }) => {
               },
             },
 
-            // 🔤 字体文件 - CacheFirst
+            // 字体文件 - CacheFirst（字体很少变化，可长期缓存）
             {
               urlPattern: ({ request }) => request.destination === "font",
               handler: "CacheFirst",
@@ -83,7 +83,7 @@ export default defineConfig(({ command, mode }) => {
               },
             },
 
-            // 🌍 第三方CDN资源 - CacheFirst（外部资源稳定）
+            // 第三方CDN资源 - CacheFirst（外部资源稳定）
             {
               urlPattern: ({ url }) =>
                 url.origin !== self.location.origin &&
@@ -105,7 +105,7 @@ export default defineConfig(({ command, mode }) => {
               },
             },
 
-            // 🖼️ 图廊图片 - NetworkFirst
+            // 图廊图片 - NetworkFirst
             {
               urlPattern: ({ request, url }) =>
                 request.destination === "image" && (url.pathname.includes("/api/") || url.searchParams.has("X-Amz-Algorithm") || url.hostname !== self.location.hostname),
@@ -123,7 +123,7 @@ export default defineConfig(({ command, mode }) => {
               },
             },
 
-            // 🎵 用户媒体文件 - NetworkFirst（大文件适度缓存）
+            // 用户媒体文件 - NetworkFirst（大文件适度缓存）
             {
               urlPattern: ({ request, url }) =>
                 (request.destination === "video" || request.destination === "audio" || /\.(mp4|webm|ogg|mp3|wav|flac|aac)$/i.test(url.pathname)) &&
@@ -143,7 +143,7 @@ export default defineConfig(({ command, mode }) => {
               },
             },
 
-            // 📄 用户文档文件 - NetworkFirst（文档快速更新）
+            // 用户文档文件 - NetworkFirst（文档快速更新）
             {
               urlPattern: ({ url }) =>
                 /\.(pdf|doc|docx|xls|xlsx|ppt|pptx|txt|md)$/i.test(url.pathname) &&
@@ -162,7 +162,7 @@ export default defineConfig(({ command, mode }) => {
               },
             },
 
-            // 🖼️ 应用内置图片 - StaleWhileRevalidate（应用资源）
+            // 应用内置图片 - StaleWhileRevalidate（应用资源）
             {
               urlPattern: ({ request, url }) => request.destination === "image" && url.origin === self.location.origin && !url.pathname.includes("/api/"),
               handler: "StaleWhileRevalidate",
@@ -178,7 +178,7 @@ export default defineConfig(({ command, mode }) => {
               },
             },
 
-            // 🔧 系统API缓存 - NetworkFirst
+            // 系统API缓存 - NetworkFirst
             {
               urlPattern: /^.*\/api\/(system\/max-upload-size|health|version).*$/,
               handler: "NetworkFirst",
@@ -195,7 +195,7 @@ export default defineConfig(({ command, mode }) => {
               },
             },
 
-            // 📁 文件系统API缓存 - NetworkFirst
+            // 文件系统API缓存 - NetworkFirst
             {
               urlPattern: /^.*\/api\/fs\/.*$/,
               handler: "NetworkFirst",
@@ -212,7 +212,7 @@ export default defineConfig(({ command, mode }) => {
               },
             },
 
-            // 📝 文本分享API缓存 - NetworkFirst（内容短期缓存）
+            // 文本分享API缓存 - NetworkFirst（内容短期缓存）
             {
               urlPattern: /^.*\/api\/(pastes|paste|raw)\/.*$/,
               handler: "NetworkFirst",
@@ -229,7 +229,7 @@ export default defineConfig(({ command, mode }) => {
               },
             },
 
-            // 🗂️ 配置管理API缓存 - NetworkFirst（配置信息适度缓存）
+            // 配置管理API缓存 - NetworkFirst
             {
               urlPattern: /^.*\/api\/(admin\/mounts|admin\/api-keys|admin\/system-settings|files)\/.*$/,
               handler: "NetworkFirst",
@@ -237,7 +237,7 @@ export default defineConfig(({ command, mode }) => {
                 cacheName: "config-api",
                 expiration: {
                   maxEntries: 30,
-                  maxAgeSeconds: 30 * 60, // 30分钟（配置变更不频繁）
+                  maxAgeSeconds: 30 * 60, // 30分钟
                 },
                 networkTimeoutSeconds: 4,
                 cacheableResponse: {
@@ -246,7 +246,7 @@ export default defineConfig(({ command, mode }) => {
               },
             },
 
-            // 🔍 搜索API缓存 - NetworkFirst
+            // 搜索API缓存 - NetworkFirst
             {
               urlPattern: /^.*\/api\/fs\/search.*$/,
               handler: "NetworkFirst",
@@ -263,7 +263,7 @@ export default defineConfig(({ command, mode }) => {
               },
             },
 
-            // 📤 上传API缓存 - NetworkFirst
+            // 上传API缓存 - NetworkFirst
             {
               urlPattern: /^.*\/api\/(upload|fs\/upload|fs\/presign|fs\/multipart|url)\/.*$/,
               handler: "NetworkFirst",
@@ -280,7 +280,7 @@ export default defineConfig(({ command, mode }) => {
               },
             },
 
-            // 🌐 公共API缓存 - NetworkFirst
+            // 公共API缓存 - NetworkFirst
             {
               urlPattern: /^.*\/api\/public\/.*$/,
               handler: "NetworkFirst",
@@ -297,7 +297,7 @@ export default defineConfig(({ command, mode }) => {
               },
             },
 
-            // 📊 WebDAV缓存 - NetworkFirst（WebDAV操作无缓存）
+            // WebDAV缓存 - NetworkFirst（WebDAV操作无缓存）
             {
               urlPattern: /^.*\/dav\/.*$/,
               handler: "NetworkFirst",
@@ -314,7 +314,7 @@ export default defineConfig(({ command, mode }) => {
               },
             },
 
-            // 🔗 预签名URL缓存 - NetworkFirst
+            // 预签名URL缓存 - NetworkFirst
             {
               urlPattern: ({ url }) => url.searchParams.has("X-Amz-Algorithm") || url.searchParams.has("Signature") || url.pathname.includes("/presigned/"),
               handler: "NetworkFirst",
@@ -331,7 +331,7 @@ export default defineConfig(({ command, mode }) => {
               },
             },
 
-            // 🎯 页面导航缓存 - NetworkFirst（页面短期缓存）
+            // 页面导航缓存 - NetworkFirst（页面短期缓存）
             {
               urlPattern: ({ request }) => request.mode === "navigate",
               handler: "NetworkFirst",
@@ -348,7 +348,7 @@ export default defineConfig(({ command, mode }) => {
               },
             },
 
-            // 🔄 通用API回退缓存 - NetworkFirst（其他API短期缓存）
+            // 通用API回退缓存 - NetworkFirst（其他API短期缓存）
             {
               urlPattern: /^.*\/api\/.*$/,
               handler: "NetworkFirst",
@@ -366,7 +366,7 @@ export default defineConfig(({ command, mode }) => {
             },
           ],
         },
-        includeAssets: ["favicon.ico", "apple-touch-icon.png", "robots.txt"],
+        includeAssets: ["favicon.ico", "apple-touch-icon.png", "robots.txt", "dist/**/*"],
         manifest: {
           name: "CloudPaste",
           short_name: "CloudPaste",
@@ -455,8 +455,8 @@ export default defineConfig(({ command, mode }) => {
       },
     },
     optimizeDeps: {
-      include: ["vue-i18n", "chart.js", "qrcode"],
-      // 移除vditor排除配置，因为现在从assets加载
+      include: ["vue-i18n", "chart.js", "qrcode", "mime-db"],
+      // 移除vditor排除配置，因为现在从本地dist目录加载
     },
     build: {
       minify: "terser",
@@ -471,7 +471,6 @@ export default defineConfig(({ command, mode }) => {
           manualChunks: {
             // 将大型库分离到单独的 chunk
             "vendor-vue": ["vue", "vue-router", "vue-i18n"],
-            // 移除vditor chunk，因为现在从assets加载
             "vendor-charts": ["chart.js", "vue-chartjs"],
             "vendor-utils": ["axios", "qrcode", "file-saver", "docx", "html-to-image"],
           },

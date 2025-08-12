@@ -5,158 +5,9 @@
 
 import { BaseRepository } from "./BaseRepository.js";
 import { DbTables } from "../constants/index.js";
+import { SETTING_GROUPS, SETTING_TYPES, SETTING_FLAGS, validateSettingValue, convertSettingValue } from "../constants/settings.js";
 
 export class SystemRepository extends BaseRepository {
-  /**
-   * 根据键名查找系统设置
-   * @param {string} key - 设置键名
-   * @returns {Promise<Object|null>} 系统设置对象或null
-   */
-  async findByKey(key) {
-    if (!key) return null;
-
-    return await this.findOne(DbTables.SYSTEM_SETTINGS, { key });
-  }
-
-  /**
-   * 获取系统设置（findByKey的别名）
-   * @param {string} key - 设置键名
-   * @returns {Promise<Object|null>} 系统设置对象或null
-   */
-  async getSetting(key) {
-    return await this.findByKey(key);
-  }
-
-  /**
-   * 获取所有系统设置
-   * @returns {Promise<Array>} 系统设置列表
-   */
-  async findAll() {
-    return await this.findMany(DbTables.SYSTEM_SETTINGS, {}, { orderBy: "key ASC" });
-  }
-
-  /**
-   * 创建或更新系统设置
-   * @param {string} key - 设置键名
-   * @param {string} value - 设置值
-   * @param {string} description - 设置描述（可选）
-   * @returns {Promise<Object>} 操作结果
-   */
-  async upsertSetting(key, value, description = null) {
-    const existing = await this.findByKey(key);
-
-    if (existing) {
-      // 更新现有设置
-      return await this.execute(
-        `UPDATE ${DbTables.SYSTEM_SETTINGS}
-         SET value = ?, updated_at = CURRENT_TIMESTAMP
-         WHERE key = ?`,
-        [value, key]
-      );
-    } else {
-      // 创建新设置
-      return await this.execute(
-        `INSERT INTO ${DbTables.SYSTEM_SETTINGS} (key, value, description, updated_at)
-         VALUES (?, ?, ?, datetime('now'))`,
-        [key, value, description]
-      );
-    }
-  }
-
-  /**
-   * 更新最大上传大小设置
-   * @param {number} maxUploadSize - 最大上传大小(MB)
-   * @returns {Promise<Object>} 操作结果
-   */
-  async updateMaxUploadSize(maxUploadSize) {
-    // 验证是否为有效数字
-    if (isNaN(maxUploadSize) || maxUploadSize <= 0) {
-      throw new Error("最大上传大小必须为正整数");
-    }
-
-    return await this.upsertSetting("max_upload_size", maxUploadSize.toString(), "单次最大上传文件大小限制");
-  }
-
-  /**
-   * 更新WebDAV上传模式设置
-   * @param {string} webdavUploadMode - WebDAV上传模式
-   * @returns {Promise<Object>} 操作结果
-   */
-  async updateWebdavUploadMode(webdavUploadMode) {
-    // 验证是否为有效的上传模式
-    const validModes = ["multipart", "direct"];
-    if (!validModes.includes(webdavUploadMode)) {
-      throw new Error("WebDAV上传模式无效，有效值为: multipart, direct");
-    }
-
-    return await this.upsertSetting("webdav_upload_mode", webdavUploadMode, "WebDAV上传模式（multipart, direct）");
-  }
-
-  /**
-   * 批量更新系统设置
-   * @param {Object} settings - 设置键值对
-   * @returns {Promise<Object>} 操作结果
-   */
-  async batchUpsertSettings(settings) {
-    const keys = Object.keys(settings);
-    let updatedCount = 0;
-    let createdCount = 0;
-
-    for (const key of keys) {
-      const value = settings[key];
-      const existing = await this.findByKey(key);
-
-      if (existing) {
-        await this.execute(
-          `UPDATE ${DbTables.SYSTEM_SETTINGS} 
-           SET value = ?, updated_at = CURRENT_TIMESTAMP 
-           WHERE key = ?`,
-          [value, key]
-        );
-        updatedCount++;
-      } else {
-        const now = new Date().toISOString();
-        await this.create(DbTables.SYSTEM_SETTINGS, {
-          key,
-          value,
-          created_at: now,
-          updated_at: now,
-        });
-        createdCount++;
-      }
-    }
-
-    return {
-      updatedCount,
-      createdCount,
-      totalCount: updatedCount + createdCount,
-      message: `已更新${updatedCount}个设置，创建${createdCount}个设置`,
-    };
-  }
-
-  /**
-   * 删除系统设置
-   * @param {string} key - 设置键名
-   * @returns {Promise<Object>} 删除结果
-   */
-  async deleteSetting(key) {
-    const result = await this.execute(`DELETE FROM ${DbTables.SYSTEM_SETTINGS} WHERE key = ?`, [key]);
-
-    return {
-      deletedCount: result.meta?.changes || 0,
-      message: result.meta?.changes > 0 ? `已删除设置: ${key}` : `设置不存在: ${key}`,
-    };
-  }
-
-  /**
-   * 检查设置是否存在
-   * @param {string} key - 设置键名
-   * @returns {Promise<boolean>} 是否存在
-   */
-  async existsByKey(key) {
-    return await this.exists(DbTables.SYSTEM_SETTINGS, { key });
-  }
-
   /**
    * 获取系统统计数据
    * @returns {Promise<Object>} 统计数据
@@ -266,36 +117,32 @@ export class SystemRepository extends BaseRepository {
 
   /**
    * 清理过期数据
+   * 使用各个Repository的专门方法，避免重复SQL逻辑
    * @returns {Promise<Object>} 清理结果
    */
   async cleanupExpiredData() {
-    const now = new Date().toISOString();
+    const now = new Date();
     let totalCleaned = 0;
 
-    // 清理过期的文本分享
-    const expiredPastes = await this.execute(
-      `DELETE FROM ${DbTables.PASTES}
-       WHERE expires_at IS NOT NULL AND expires_at < ?`,
-      [now]
-    );
-    const pastesCount = expiredPastes.meta?.changes || 0;
+    // 使用PasteRepository的专门方法清理过期文本分享
+    const PasteRepository = require("./PasteRepository");
+    const pasteRepo = new PasteRepository(this.db);
+
+    const expiredPastesResult = await pasteRepo.deleteExpired(now);
+    const pastesCount = expiredPastesResult.deletedCount;
     totalCleaned += pastesCount;
 
-    // 清理过期的API密钥
-    const expiredApiKeys = await this.execute(
-      `DELETE FROM ${DbTables.API_KEYS}
-       WHERE expires_at IS NOT NULL AND expires_at < ?`,
-      [now]
-    );
-    const apiKeysCount = expiredApiKeys.meta?.changes || 0;
+    // 使用ApiKeyRepository的专门方法清理过期API密钥
+    const ApiKeyRepository = require("./ApiKeyRepository");
+    const apiKeyRepo = new ApiKeyRepository(this.db);
+
+    const expiredApiKeysResult = await apiKeyRepo.deleteExpired(now);
+    const apiKeysCount = expiredApiKeysResult.deletedCount;
     totalCleaned += apiKeysCount;
 
-    // 清理超过最大查看次数的文本分享
-    const overLimitPastes = await this.execute(
-      `DELETE FROM ${DbTables.PASTES}
-       WHERE max_views IS NOT NULL AND max_views > 0 AND views >= max_views`
-    );
-    const overLimitCount = overLimitPastes.meta?.changes || 0;
+    // 使用PasteRepository的专门方法清理超限文本分享
+    const overLimitResult = await pasteRepo.deleteOverViewLimit();
+    const overLimitCount = overLimitResult.deletedCount;
     totalCleaned += overLimitCount;
 
     return {
@@ -314,8 +161,8 @@ export class SystemRepository extends BaseRepository {
    * @returns {Promise<Object>} 全局配置
    */
   async getProxySignConfig() {
-    const signAllSetting = await this.findByKey("proxy_sign_all");
-    const expiresSetting = await this.findByKey("proxy_sign_expires");
+    const signAllSetting = await this.getSettingMetadata("proxy_sign_all");
+    const expiresSetting = await this.getSettingMetadata("proxy_sign_expires");
 
     return {
       signAll: signAllSetting?.value === "true",
@@ -342,23 +189,173 @@ export class SystemRepository extends BaseRepository {
       throw new Error("expires 必须是非负数");
     }
 
-    // 批量更新设置
+    // 使用新的分组更新机制（代理签名设置属于全局设置组，group_id = 1）
     const settings = {
       proxy_sign_all: signAll.toString(),
       proxy_sign_expires: expires.toString(),
     };
 
-    return await this.batchUpsertSettings(settings);
+    return await this.updateGroupSettings(1, settings, { validateType: true });
+  }
+
+  // ==================== 分组和类型化设置管理方法 ====================
+
+  /**
+   * 按分组获取设置项
+   * @param {number} groupId - 分组ID
+   * @param {boolean} includeMetadata - 是否包含元数据
+   * @returns {Promise<Array>} 设置项列表
+   */
+  async getSettingsByGroup(groupId, includeMetadata = true) {
+    const orderBy = includeMetadata ? "sort_order ASC, key ASC" : "key ASC";
+
+    if (includeMetadata) {
+      // 返回完整的元数据
+      return await this.findMany(DbTables.SYSTEM_SETTINGS, { group_id: groupId }, { orderBy });
+    } else {
+      // 只返回key-value对
+      const settings = await this.findMany(DbTables.SYSTEM_SETTINGS, { group_id: groupId }, { orderBy });
+      return settings.map((setting) => ({
+        key: setting.key,
+        value: setting.value,
+      }));
+    }
   }
 
   /**
-   * 获取系统设置值（带默认值）
-   * @param {string} key - 设置键名
-   * @param {string} defaultValue - 默认值
-   * @returns {Promise<string>} 设置值
+   * 获取所有分组的设置项
+   * @param {boolean} includeSystemGroup - 是否包含系统内部分组
+   * @returns {Promise<Object>} 按分组组织的设置项
    */
-  async getSettingValue(key, defaultValue = "") {
-    const setting = await this.findByKey(key);
-    return setting?.value || defaultValue;
+  async getAllSettingsByGroups(includeSystemGroup = false) {
+    const whereClause = includeSystemGroup ? {} : { group_id: { "!=": SETTING_GROUPS.SYSTEM } };
+    const allSettings = await this.findMany(DbTables.SYSTEM_SETTINGS, whereClause, { orderBy: "group_id ASC, sort_order ASC, key ASC" });
+
+    // 按分组组织数据
+    const groupedSettings = {};
+    for (const setting of allSettings) {
+      const groupId = setting.group_id || SETTING_GROUPS.GLOBAL;
+      if (!groupedSettings[groupId]) {
+        groupedSettings[groupId] = [];
+      }
+      groupedSettings[groupId].push(setting);
+    }
+
+    return groupedSettings;
+  }
+
+  /**
+   * 获取设置项的元数据
+   * @param {string} key - 设置键名
+   * @returns {Promise<Object|null>} 设置项元数据
+   */
+  async getSettingMetadata(key) {
+    if (!key) return null;
+    return await this.findOne(DbTables.SYSTEM_SETTINGS, { key });
+  }
+
+  /**
+   * 批量更新分组设置（支持类型验证）
+   * @param {number} groupId - 分组ID
+   * @param {Object} settings - 设置键值对
+   * @param {Object} options - 选项
+   * @returns {Promise<Object>} 操作结果
+   */
+  async updateGroupSettings(groupId, settings, options = {}) {
+    const { validateType = true } = options;
+    const keys = Object.keys(settings);
+    let updatedCount = 0;
+    const errors = [];
+
+    // 验证所有设置项都属于指定分组
+    for (const key of keys) {
+      const metadata = await this.getSettingMetadata(key);
+      if (!metadata) {
+        errors.push({ key, error: `设置项不存在: ${key}` });
+        continue;
+      }
+
+      if (metadata.group_id !== groupId) {
+        errors.push({ key, error: `设置项 ${key} 不属于分组 ${groupId}` });
+        continue;
+      }
+
+      try {
+        let finalValue = settings[key];
+
+        // 类型验证
+        if (validateType && metadata.type) {
+          if (!validateSettingValue(key, finalValue, metadata.type)) {
+            throw new Error(`设置值无效: ${key} = ${finalValue}`);
+          }
+        }
+
+        // 类型转换
+        if (metadata.type) {
+          finalValue = convertSettingValue(finalValue, metadata.type);
+        }
+
+        // 更新设置
+        await this.execute(
+          `UPDATE ${DbTables.SYSTEM_SETTINGS}
+           SET value = ?, updated_at = CURRENT_TIMESTAMP
+           WHERE key = ?`,
+          [finalValue.toString(), key]
+        );
+
+        updatedCount++;
+      } catch (error) {
+        errors.push({ key, error: error.message });
+      }
+    }
+
+    return {
+      groupId,
+      updatedCount,
+      totalCount: keys.length,
+      errors,
+      success: errors.length === 0,
+      message: errors.length === 0 ? `成功更新分组${groupId}的${updatedCount}个设置` : `更新了${updatedCount}个设置，${errors.length}个失败`,
+    };
+  }
+
+  /**
+   * 获取分组列表和统计信息
+   * @returns {Promise<Array>} 分组信息列表
+   */
+  async getGroupsInfo() {
+    const groupStats = await this.query(`
+      SELECT
+        group_id,
+        COUNT(*) as setting_count,
+        COUNT(CASE WHEN flags = ${SETTING_FLAGS.READONLY} THEN 1 END) as readonly_count
+      FROM ${DbTables.SYSTEM_SETTINGS}
+      WHERE group_id != ${SETTING_GROUPS.SYSTEM}
+      GROUP BY group_id
+      ORDER BY group_id ASC
+    `);
+
+    return (groupStats.results || []).map((stat) => ({
+      id: stat.group_id,
+      name: this.getGroupName(stat.group_id),
+      settingCount: stat.setting_count,
+      readonlyCount: stat.readonly_count,
+    }));
+  }
+
+  /**
+   * 获取分组名称
+   * @param {number} groupId - 分组ID
+   * @returns {string} 分组名称
+   */
+  getGroupName(groupId) {
+    const groupNames = {
+      [SETTING_GROUPS.GLOBAL]: "全局设置",
+      [SETTING_GROUPS.WEBDAV]: "WebDAV设置",
+      [SETTING_GROUPS.SYSTEM]: "系统设置",
+      [SETTING_GROUPS.PREVIEW]: "预览设置",
+      [SETTING_GROUPS.SITE]: "站点设置",
+    };
+    return groupNames[groupId] || `未知分组(${groupId})`;
   }
 }

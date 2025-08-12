@@ -561,8 +561,8 @@ export async function handlePropfind(c, path, userId, userType, db) {
       userIdOrInfo = userId;
       actualUserType = "admin";
     } else if (userType === "apiKey") {
-      // 对于API密钥用户，userId已经是完整的信息对象
-      if (typeof userId === "object") {
+      // 对于API密钥用户，userId应该是完整的信息对象
+      if (typeof userId === "object" && userId !== null) {
         userIdOrInfo = {
           id: userId.id,
           name: userId.name,

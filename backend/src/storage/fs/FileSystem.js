@@ -127,6 +127,45 @@ export class FileSystem {
   }
 
   /**
+   * 上传流式数据
+   * @param {string} path - 目标路径
+   * @param {ReadableStream} stream - 数据流
+   * @param {string|Object} userIdOrInfo - 用户ID或API密钥信息
+   * @param {string} userType - 用户类型
+   * @param {Object} options - 选项参数
+   * @param {string} options.filename - 文件名
+   * @param {string} options.contentType - 内容类型
+   * @param {number} options.contentLength - 内容长度
+   * @param {boolean} options.useMultipart - 是否使用分片上传
+   * @returns {Promise<Object>} 上传结果
+   */
+  async uploadStream(path, stream, userIdOrInfo, userType, options = {}) {
+    const { driver, mount, subPath } = await this.mountManager.getDriverByPath(path, userIdOrInfo, userType);
+
+    if (!driver.hasCapability(CAPABILITIES.WRITER)) {
+      throw new HTTPException(ApiStatus.NOT_IMPLEMENTED, {
+        message: `存储驱动 ${driver.getType()} 不支持写入操作`,
+      });
+    }
+
+    // 检查驱动是否支持流式上传
+    if (!driver.uploadStream) {
+      throw new HTTPException(ApiStatus.NOT_IMPLEMENTED, {
+        message: `存储驱动 ${driver.getType()} 不支持流式上传`,
+      });
+    }
+
+    return await driver.uploadStream(path, stream, {
+      mount,
+      subPath,
+      db: this.mountManager.db,
+      userIdOrInfo,
+      userType,
+      ...options,
+    });
+  }
+
+  /**
    * 创建目录
    * @param {string} path - 目录路径
    * @param {string|Object} userIdOrInfo - 用户ID或API密钥信息
@@ -501,17 +540,15 @@ export class FileSystem {
   }
 
   /**
-   * 初始化后端分片上传
-   * @param {string} path - 目标路径
+   * 列出进行中的分片上传
+   * @param {string} path - 目标路径（可选，用于过滤特定文件的上传）
    * @param {string|Object} userIdOrInfo - 用户ID或API密钥信息
    * @param {string} userType - 用户类型
-   * @param {string} contentType - 内容类型
-   * @param {number} fileSize - 文件大小
-   * @param {string} filename - 文件名
-   * @returns {Promise<Object>} 初始化结果
+   * @param {Object} options - 选项参数
+   * @returns {Promise<Object>} 进行中的上传列表
    */
-  async initializeBackendMultipartUpload(path, userIdOrInfo, userType, contentType, fileSize, filename) {
-    const { driver, mount, subPath } = await this.mountManager.getDriverByPath(path, userIdOrInfo, userType);
+  async listMultipartUploads(path = "", userIdOrInfo, userType, options = {}) {
+    const { driver, mount, subPath } = await this.mountManager.getDriverByPath(path || "/", userIdOrInfo, userType);
 
     if (!driver.hasCapability(CAPABILITIES.MULTIPART)) {
       throw new HTTPException(ApiStatus.NOT_IMPLEMENTED, {
@@ -519,28 +556,24 @@ export class FileSystem {
       });
     }
 
-    return await driver.initializeBackendMultipartUpload(path, {
+    return await driver.listMultipartUploads(subPath, {
       mount,
-      subPath,
       db: this.mountManager.db,
-      contentType,
-      fileSize,
-      filename,
+      ...options,
     });
   }
 
   /**
-   * 上传后端分片
+   * 列出已上传的分片
    * @param {string} path - 目标路径
+   * @param {string} uploadId - 上传ID
+   * @param {string} fileName - 文件名
    * @param {string|Object} userIdOrInfo - 用户ID或API密钥信息
    * @param {string} userType - 用户类型
-   * @param {string} uploadId - 上传ID
-   * @param {number} partNumber - 分片编号
-   * @param {ArrayBuffer} partData - 分片数据
-   * @param {string} s3Key - S3键（可选）
-   * @returns {Promise<Object>} 上传结果
+   * @param {Object} options - 选项参数
+   * @returns {Promise<Object>} 已上传的分片列表
    */
-  async uploadBackendPart(path, userIdOrInfo, userType, uploadId, partNumber, partData, s3Key = null) {
+  async listMultipartParts(path, uploadId, fileName, userIdOrInfo, userType, options = {}) {
     const { driver, mount, subPath } = await this.mountManager.getDriverByPath(path, userIdOrInfo, userType);
 
     if (!driver.hasCapability(CAPABILITIES.MULTIPART)) {
@@ -549,30 +582,25 @@ export class FileSystem {
       });
     }
 
-    return await driver.uploadBackendPart(path, {
+    return await driver.listMultipartParts(subPath, uploadId, {
       mount,
-      subPath,
       db: this.mountManager.db,
-      uploadId,
-      partNumber,
-      partData,
-      s3Key,
+      fileName,
+      ...options,
     });
   }
 
   /**
-   * 完成后端分片上传
+   * 为现有上传刷新预签名URL
    * @param {string} path - 目标路径
+   * @param {string} uploadId - 现有的上传ID
+   * @param {Array} partNumbers - 需要刷新URL的分片编号数组
    * @param {string|Object} userIdOrInfo - 用户ID或API密钥信息
    * @param {string} userType - 用户类型
-   * @param {string} uploadId - 上传ID
-   * @param {Array} parts - 分片信息
-   * @param {string} contentType - 内容类型
-   * @param {number} fileSize - 文件大小
-   * @param {string} s3Key - S3键（可选）
-   * @returns {Promise<Object>} 完成结果
+   * @param {Object} options - 选项参数
+   * @returns {Promise<Object>} 刷新的预签名URL列表
    */
-  async completeBackendMultipartUpload(path, userIdOrInfo, userType, uploadId, parts, contentType, fileSize, s3Key = null) {
+  async refreshMultipartUrls(path, uploadId, partNumbers, userIdOrInfo, userType, options = {}) {
     const { driver, mount, subPath } = await this.mountManager.getDriverByPath(path, userIdOrInfo, userType);
 
     if (!driver.hasCapability(CAPABILITIES.MULTIPART)) {
@@ -581,19 +609,110 @@ export class FileSystem {
       });
     }
 
-    return await driver.completeBackendMultipartUpload(path, {
+    return await driver.refreshMultipartUrls(subPath, uploadId, partNumbers, {
       mount,
-      subPath,
       db: this.mountManager.db,
-      uploadId,
-      parts,
-      contentType,
-      fileSize,
-      userIdOrInfo,
-      userType,
-      s3Key,
+      ...options,
     });
   }
+
+  // /**
+  //  * 初始化后端分片上传 - 已废弃，项目使用前端分片上传
+  //  * @deprecated 使用前端分片上传 initializeFrontendMultipartUpload 替代
+  //  * @param {string} path - 目标路径
+  //  * @param {string|Object} userIdOrInfo - 用户ID或API密钥信息
+  //  * @param {string} userType - 用户类型
+  //  * @param {string} contentType - 内容类型
+  //  * @param {number} fileSize - 文件大小
+  //  * @param {string} filename - 文件名
+  //  * @returns {Promise<Object>} 初始化结果
+  //  */
+  // async initializeBackendMultipartUpload(path, userIdOrInfo, userType, contentType, fileSize, filename) {
+  //   const { driver, mount, subPath } = await this.mountManager.getDriverByPath(path, userIdOrInfo, userType);
+
+  //   if (!driver.hasCapability(CAPABILITIES.MULTIPART)) {
+  //     throw new HTTPException(ApiStatus.NOT_IMPLEMENTED, {
+  //       message: `存储驱动 ${driver.getType()} 不支持分片上传`,
+  //     });
+  //   }
+
+  //   return await driver.initializeBackendMultipartUpload(path, {
+  //     mount,
+  //     subPath,
+  //     db: this.mountManager.db,
+  //     contentType,
+  //     fileSize,
+  //     filename,
+  //   });
+  // }
+
+  // /**
+  //  * 上传后端分片 - 已废弃，项目使用前端分片上传
+  //  * @deprecated 使用前端分片上传替代
+  //  * @param {string} path - 目标路径
+  //  * @param {string|Object} userIdOrInfo - 用户ID或API密钥信息
+  //  * @param {string} userType - 用户类型
+  //  * @param {string} uploadId - 上传ID
+  //  * @param {number} partNumber - 分片编号
+  //  * @param {ArrayBuffer} partData - 分片数据
+  //  * @param {string} s3Key - S3键（可选）
+  //  * @returns {Promise<Object>} 上传结果
+  //  */
+  // async uploadBackendPart(path, userIdOrInfo, userType, uploadId, partNumber, partData, s3Key = null) {
+  //   const { driver, mount, subPath } = await this.mountManager.getDriverByPath(path, userIdOrInfo, userType);
+
+  //   if (!driver.hasCapability(CAPABILITIES.MULTIPART)) {
+  //     throw new HTTPException(ApiStatus.NOT_IMPLEMENTED, {
+  //       message: `存储驱动 ${driver.getType()} 不支持分片上传`,
+  //     });
+  //   }
+
+  //   return await driver.uploadBackendPart(path, {
+  //     mount,
+  //     subPath,
+  //     db: this.mountManager.db,
+  //     uploadId,
+  //     partNumber,
+  //     partData,
+  //     s3Key,
+  //   });
+  // }
+
+  // /**
+  //  * 完成后端分片上传 - 已废弃，项目使用前端分片上传
+  //  * @deprecated 使用前端分片上传 completeFrontendMultipartUpload 替代
+  //  * @param {string} path - 目标路径
+  //  * @param {string|Object} userIdOrInfo - 用户ID或API密钥信息
+  //  * @param {string} userType - 用户类型
+  //  * @param {string} uploadId - 上传ID
+  //  * @param {Array} parts - 分片信息
+  //  * @param {string} contentType - 内容类型
+  //  * @param {number} fileSize - 文件大小
+  //  * @param {string} s3Key - S3键（可选）
+  //  * @returns {Promise<Object>} 完成结果
+  //  */
+  // async completeBackendMultipartUpload(path, userIdOrInfo, userType, uploadId, parts, contentType, fileSize, s3Key = null) {
+  //   const { driver, mount, subPath } = await this.mountManager.getDriverByPath(path, userIdOrInfo, userType);
+
+  //   if (!driver.hasCapability(CAPABILITIES.MULTIPART)) {
+  //     throw new HTTPException(ApiStatus.NOT_IMPLEMENTED, {
+  //       message: `存储驱动 ${driver.getType()} 不支持分片上传`,
+  //     });
+  //   }
+
+  //   return await driver.completeBackendMultipartUpload(path, {
+  //     mount,
+  //     subPath,
+  //     db: this.mountManager.db,
+  //     uploadId,
+  //     parts,
+  //     contentType,
+  //     fileSize,
+  //     userIdOrInfo,
+  //     userType,
+  //     s3Key,
+  //   });
+  // }
 
   /**
    * 中止后端分片上传
@@ -727,7 +846,7 @@ export class FileSystem {
     }
 
     // 检查搜索缓存
-    const { searchCacheManager } = await import("../../utils/SearchCache.js");
+    const { searchCacheManager } = await import("../../cache/SearchCache.js");
     const cachedResult = searchCacheManager.get(query, searchParams, userType, userIdOrInfo);
     if (cachedResult) {
       console.log(`搜索缓存命中 - 查询: ${query}, 用户类型: ${userType}`);

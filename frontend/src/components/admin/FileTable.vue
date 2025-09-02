@@ -51,10 +51,10 @@
                   </svg>
                 </span>
               </div>
-              <div class="text-xs mt-1" :class="darkMode ? 'text-gray-400' : 'text-gray-500'">
+              <div class="text-xs mt-1 truncate" :class="darkMode ? 'text-gray-400' : 'text-gray-500'" :title="file.slug ? `/${file.slug}` : '无短链接'">
                 {{ file.slug ? `/${file.slug}` : "无短链接" }}
               </div>
-              <div v-if="file.remark" class="text-xs mt-1 italic" :class="darkMode ? 'text-blue-400' : 'text-blue-600'">
+              <div v-if="file.remark" class="text-xs mt-1 italic truncate max-w-xs overflow-hidden" :class="darkMode ? 'text-blue-400' : 'text-blue-600'" :title="file.remark">
                 {{ file.remark }}
               </div>
             </div>
@@ -73,7 +73,11 @@
           <div>
             <div class="text-xs font-medium uppercase" :class="darkMode ? 'text-gray-500' : 'text-gray-500'">类型</div>
             <div>
-              <span class="px-2 py-0.5 text-xs rounded" :class="getMimeTypeClass(file)">
+              <span
+                class="px-2 py-0.5 text-xs rounded inline-block max-w-full truncate"
+                :class="getMimeTypeClass(file)"
+                :title="getSimpleMimeType(file.mimetype, file.filename, file)"
+              >
                 {{ getSimpleMimeType(file.mimetype, file.filename, file) }}
               </span>
             </div>
@@ -178,7 +182,7 @@
           <button @click="emit('copy-permanent-link', file)" class="p-2 rounded-md relative" :class="darkMode ? 'bg-gray-700 text-purple-400' : 'bg-gray-100 text-purple-600'">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101" />
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.172 13.828a4 4 0 715.656 0l4 4a4 4 0 01-5.656 5.656l-1.102-1.101" />
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.172 13.828a4 4 0 0 1 5.656 0l4 4a4 4 0 01-5.656 5.656l-1.102-1.101" />
             </svg>
             <!-- 移动端永久链接复制成功提示 -->
             <span v-if="props.copiedPermanentFiles[file.id]" class="absolute -top-8 right-0 px-2 py-1 text-xs text-white bg-green-500 rounded whitespace-nowrap"> 已复制直链 </span>
@@ -262,7 +266,7 @@ const fileColumns = computed(() => [
           h(
             "span",
             {
-              class: "font-medium truncate max-w-xs",
+              class: "font-medium truncate max-w-64",
               title: file.filename,
             },
             truncateFilename(file.filename)
@@ -280,7 +284,8 @@ const fileColumns = computed(() => [
         h(
           "span",
           {
-            class: `text-xs mt-1 truncate max-w-xs ${props.darkMode ? "text-gray-400" : "text-gray-500"}`,
+            class: `text-xs mt-1 truncate max-w-64 ${props.darkMode ? "text-gray-400" : "text-gray-500"}`,
+            title: file.slug ? `/${file.slug}` : "无短链接", // 鼠标悬停显示完整短链接
           },
           file.slug ? `/${file.slug}` : "无短链接"
         ),
@@ -288,7 +293,8 @@ const fileColumns = computed(() => [
           h(
             "span",
             {
-              class: `text-xs mt-1 italic truncate max-w-xs ${props.darkMode ? "text-blue-400" : "text-blue-600"}`,
+              class: `text-xs mt-1 italic truncate max-w-64 ${props.darkMode ? "text-blue-400" : "text-blue-600"}`,
+              title: file.remark, // 鼠标悬停显示完整备注
             },
             file.remark
           ),
@@ -303,12 +309,14 @@ const fileColumns = computed(() => [
     header: "MIME类型",
     sortable: true,
     render: (_, file) => {
+      const mimeTypeText = getSimpleMimeType(file.mimetype, file.filename, file);
       return h(
         "span",
         {
-          class: `px-2 py-1 text-xs rounded ${getMimeTypeClass(file)}`,
+          class: `px-2 py-1 text-xs rounded ${getMimeTypeClass(file)} inline-block max-w-32 truncate`,
+          title: mimeTypeText, // 鼠标悬停显示完整MIME类型
         },
-        getSimpleMimeType(file.mimetype, file.filename, file)
+        mimeTypeText
       );
     },
   },

@@ -4,11 +4,11 @@ import { HTTPException } from "hono/http-exception";
 import { logger } from "hono/logger";
 import adminRoutes from "./routes/adminRoutes.js";
 import apiKeyRoutes from "./routes/apiKeyRoutes.js";
+import { backupRoutes } from "./routes/backupRoutes.js";
 
 import s3ConfigRoutes from "./routes/s3ConfigRoutes.js";
 import systemRoutes from "./routes/systemRoutes.js";
-import adminStorageMountRoutes from "./routes/adminStorageMountRoutes.js";
-import userStorageMountRoutes from "./routes/userStorageMountRoutes.js";
+import mountRoutes from "./routes/mountRoutes.js";
 import webdavRoutes from "./routes/webdavRoutes.js";
 import fsRoutes from "./routes/fsRoutes.js";
 import { DbTables, ApiStatus } from "./constants/index.js";
@@ -26,55 +26,85 @@ const app = new Hono();
 
 // 注册中间件
 app.use("*", logger());
-app.use(
-  "*",
-  cors({
-    // 在使用credentials时，origin不能是'*'，需要指定具体域名
-    // 对于开发环境，可以使用函数动态返回请求的origin
-    origin: (origin) => {
-      // 允许任何origin发送的请求，但返回实际的origin而不是'*'
-      // 这是为了支持credentials: true的情况
-      return origin || "*";
-    },
-    allowHeaders: [
-      "Content-Type",
-      "Authorization",
-      "X-API-KEY",
-      "Depth",
-      "Destination",
-      "Overwrite",
-      "If-Match",
-      "If-None-Match",
-      "If-Modified-Since",
-      "If-Unmodified-Since",
-      "Lock-Token",
-      "Content-Length", // 添加Content-Length头
-      "X-Requested-With", // 添加X-Requested-With头，支持AJAX请求
-    ],
-    allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PROPFIND", "PROPPATCH", "MKCOL", "COPY", "MOVE", "LOCK", "UNLOCK", "HEAD"],
-    exposeHeaders: ["ETag", "Content-Length", "Content-Disposition"], // 暴露更多响应头
-    maxAge: 86400,
-    credentials: true, // 允许携带凭证
-  })
-);
+// 导入WebDAV配置
+import { WEBDAV_BASE_PATH } from "./webdav/auth/config/WebDAVConfig.js";
+
+// 统一CORS中间件
+app.use("*", async (c, next) => {
+  const isWebDAVPath = c.req.path === WEBDAV_BASE_PATH || c.req.path.startsWith(WEBDAV_BASE_PATH + "/");
+  const isRootPath = c.req.path === "/";
+
+  if (c.req.method === "OPTIONS" && (isWebDAVPath || isRootPath)) {
+    // WebDAV OPTIONS请求和根路径OPTIONS请求跳过CORS自动处理
+    console.log("WebDAV OPTIONS请求:", c.req.method, c.req.path);
+    await next();
+    return;
+  } else {
+    // 其他请求使用标准CORS处理
+    const corsMiddleware = cors({
+      origin: (origin) => {
+        return origin || "*";
+      },
+      allowHeaders: [
+        "Content-Type",
+        "Authorization",
+        "X-API-KEY",
+        "Depth",
+        "Destination",
+        "Overwrite",
+        "If-Match",
+        "If-None-Match",
+        "If-Modified-Since",
+        "If-Unmodified-Since",
+        "Lock-Token",
+        "Content-Length",
+        "X-Requested-With",
+      ],
+      allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PROPFIND", "PROPPATCH", "MKCOL", "COPY", "MOVE", "LOCK", "UNLOCK", "HEAD"],
+      exposeHeaders: ["ETag", "Content-Length", "Content-Disposition", "Content-Range", "Accept-Ranges"],
+      maxAge: 86400,
+      credentials: true,
+    });
+
+    return await corsMiddleware(c, next);
+  }
+});
+
+// 根路径WebDAV OPTIONS兼容性处理器
+// 为1Panel等客户端提供WebDAV能力发现支持
+// 必须在其他路由注册之前，确保优先匹配
+app.options("/", (c) => {
+  // 返回标准WebDAV能力声明，与/dav路径保持一致
+  const headers = {
+    Allow: "OPTIONS, PROPFIND, GET, HEAD, PUT, DELETE, MKCOL, COPY, MOVE, LOCK, UNLOCK, PROPPATCH",
+    DAV: "1, 2",
+    "MS-Author-Via": "DAV",
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "OPTIONS, PROPFIND, GET, HEAD, PUT, DELETE, MKCOL, COPY, MOVE, LOCK, UNLOCK, PROPPATCH",
+    "Access-Control-Allow-Headers": "Authorization, Content-Type, Depth, Destination, If, Lock-Token, Overwrite, X-Custom-Auth-Key",
+    "Access-Control-Expose-Headers": "DAV, Lock-Token, MS-Author-Via",
+    "Access-Control-Max-Age": "86400",
+  };
+
+  console.log("根路径WebDAV OPTIONS请求 - 客户端兼容性支持");
+  return new Response("", { status: 200, headers });
+});
 
 // 注册路由
 app.route("/", adminRoutes);
 app.route("/", apiKeyRoutes);
+app.route("/", backupRoutes);
+app.route("/", fileViewRoutes);
 app.route("/", filesRoutes);
 app.route("/", pastesRoutes);
 app.route("/", s3UploadRoutes);
-app.route("/", fileViewRoutes);
 app.route("/", urlUploadRoutes);
 app.route("/", s3ConfigRoutes);
 app.route("/", systemRoutes);
-app.route("/", adminStorageMountRoutes);
-app.route("/", userStorageMountRoutes);
+app.route("/", mountRoutes);
 app.route("/", webdavRoutes);
 app.route("/", fsRoutes);
 app.route("/", fsProxyRoutes);
-
-
 
 // 健康检查路由
 app.get("/api/health", (c) => {

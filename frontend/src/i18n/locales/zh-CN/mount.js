@@ -30,6 +30,7 @@ export default {
       placeholder: "新文件夹",
       cancel: "取消",
       create: "创建",
+      creating: "创建中...",
     },
     viewModes: {
       list: "列表视图",
@@ -210,6 +211,7 @@ export default {
       processedItems: "处理项目: {current}/{total}",
       success: "成功: {count}",
       failed: "失败: {count}",
+      skipped: "跳过: {count}",
       partialComplete: "部分完成",
       copyTask: "复制任务",
       uploadTask: "上传任务",

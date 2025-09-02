@@ -6,12 +6,13 @@
 import { HTTPException } from "hono/http-exception";
 import { ApiStatus } from "../../../../constants/index.js";
 import { generatePresignedUrl, createS3Client } from "../../../../utils/s3Utils.js";
-import { S3Client, GetObjectCommand, PutObjectCommand, DeleteObjectCommand, HeadObjectCommand, CopyObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, GetObjectCommand, PutObjectCommand, DeleteObjectCommand, ListObjectsV2Command, CopyObjectCommand } from "@aws-sdk/client-s3";
 import { getMimeTypeFromFilename } from "../../../../utils/fileUtils.js";
 import { handleFsError } from "../../../fs/utils/ErrorHandler.js";
 import { updateParentDirectoriesModifiedTime } from "../utils/S3DirectoryUtils.js";
 import { CAPABILITIES } from "../../../interfaces/capabilities/index.js";
 import { GetFileType, getFileTypeName } from "../../../../utils/fileTypeDetector.js";
+import { FILE_TYPES, FILE_TYPE_NAMES } from "../../../../constants/index.js";
 
 export class S3FileOperations {
   /**
@@ -42,10 +43,10 @@ export class S3FileOperations {
     try {
       const s3Client = await createS3Client(s3Config, encryptionSecret);
 
-      // 构建获取对象的参数
+      // 构建GetObject参数
       const getParams = {
         Bucket: s3Config.bucket_name,
-        Key: s3SubPath,
+        Key: s3SubPath.startsWith("/") ? s3SubPath.slice(1) : s3SubPath,
       };
 
       // 处理Range请求（用于视频流等）
@@ -53,9 +54,11 @@ export class S3FileOperations {
         const rangeHeader = request.headers.get("range");
         if (rangeHeader) {
           getParams.Range = rangeHeader;
+          console.log(`[S3FileOperations] Range请求: ${rangeHeader} -> ${s3SubPath}`);
         }
       }
 
+      // 使用AWS SDK v3的GetObjectCommand
       const getCommand = new GetObjectCommand(getParams);
       const response = await s3Client.send(getCommand);
 
@@ -67,8 +70,14 @@ export class S3FileOperations {
       headers.set("Content-Type", contentType);
       headers.set("Content-Length", response.ContentLength?.toString() || "0");
 
-      // 设置缓存控制
-      headers.set("Cache-Control", "public, max-age=31536000"); // 1年缓存
+      // 检查是否为Range请求响应
+      const contentRange = response.ContentRange;
+      const isRangeResponse = !!contentRange;
+
+      // 设置缓存控制 - Range请求使用较短的缓存时间
+      if (isRangeResponse) {
+        headers.set("Cache-Control", "public, max-age=3600"); // Range请求1小时缓存
+      }
 
       // 处理下载
       if (forceDownload) {
@@ -80,11 +89,14 @@ export class S3FileOperations {
         }
       }
 
-      // 处理Range响应
-      if (response.ContentRange) {
-        headers.set("Content-Range", response.ContentRange);
-        headers.set("Accept-Ranges", "bytes");
+      // 处理Range响应 - 确保传递所有Range相关头部
+      if (contentRange) {
+        headers.set("Content-Range", contentRange);
+        console.log(`[S3FileOperations] Range响应: ${contentRange}`);
       }
+
+      // 始终设置Accept-Ranges以支持Range请求
+      headers.set("Accept-Ranges", "bytes");
 
       // 设置ETag
       if (response.ETag) {
@@ -96,21 +108,21 @@ export class S3FileOperations {
         headers.set("Last-Modified", response.LastModified.toUTCString());
       }
 
-      // 转换流为Response
-      const status = response.ContentRange ? 206 : 200;
+      // 返回Response，AWS SDK v3成功响应状态码为200或206
+      const statusCode = isRangeResponse ? 206 : 200;
       return new Response(response.Body, {
-        status,
+        status: statusCode,
         headers,
       });
     } catch (error) {
       console.error("从S3获取文件失败:", error);
 
-      if (error.$metadata?.httpStatusCode === 404) {
-        throw new HTTPException(ApiStatus.NOT_FOUND, { message: "文件不存在" });
-      } else if (error.$metadata?.httpStatusCode === 403) {
-        throw new HTTPException(ApiStatus.FORBIDDEN, { message: "没有权限访问该文件" });
+      // 如果是HTTPException，直接抛出
+      if (error instanceof HTTPException) {
+        throw error;
       }
 
+      // 处理网络错误或其他错误
       throw new HTTPException(ApiStatus.INTERNAL_ERROR, {
         message: `获取文件失败: ${error.message}`,
       });
@@ -128,29 +140,44 @@ export class S3FileOperations {
 
     return handleFsError(
       async () => {
-        // 首先尝试HEAD请求获取文件元数据
-        const headParams = {
+        // 使用 ListObjectsV2Command 获取文件信息
+        console.log(`getFileInfo - 使用 ListObjects 查询文件: ${s3SubPath}`);
+
+        const listParams = {
           Bucket: this.config.bucket_name,
-          Key: s3SubPath,
+          Prefix: s3SubPath,
+          MaxKeys: 1,
         };
 
         try {
-          const headCommand = new HeadObjectCommand(headParams);
-          const headResponse = await this.s3Client.send(headCommand);
+          const listCommand = new ListObjectsV2Command(listParams);
+          const listResponse = await this.s3Client.send(listCommand);
+
+          // 检查是否找到精确匹配的文件
+          const exactMatch = listResponse.Contents?.find((item) => item.Key === s3SubPath);
+
+          if (!exactMatch) {
+            throw new HTTPException(ApiStatus.NOT_FOUND, { message: "文件不存在" });
+          }
 
           // 构建文件信息对象
           const fileName = path.split("/").filter(Boolean).pop() || "/";
-          const fileType = await GetFileType(fileName, db);
-          const fileTypeName = await getFileTypeName(fileName, db);
+
+          // 检查是否为目录：基于Key是否以'/'结尾判断
+          const isDirectory = exactMatch.Key.endsWith("/");
+
+          const fileType = isDirectory ? FILE_TYPES.FOLDER : await GetFileType(fileName, db);
+          const fileTypeName = isDirectory ? FILE_TYPE_NAMES[FILE_TYPES.FOLDER] : await getFileTypeName(fileName, db);
+          const detectedMimeType = isDirectory ? "application/x-directory" : getMimeTypeFromFilename(fileName);
 
           const result = {
             path: path,
             name: fileName,
-            isDirectory: false,
-            size: headResponse.ContentLength || 0,
-            modified: headResponse.LastModified ? headResponse.LastModified.toISOString() : new Date().toISOString(),
-            contentType: headResponse.ContentType || "application/octet-stream",
-            etag: headResponse.ETag ? headResponse.ETag.replace(/"/g, "") : undefined,
+            isDirectory: isDirectory,
+            size: isDirectory ? 0 : exactMatch.Size || 0, // 目录大小为0
+            modified: exactMatch.LastModified ? exactMatch.LastModified.toISOString() : new Date().toISOString(),
+            mimetype: detectedMimeType,
+            etag: exactMatch.ETag ? exactMatch.ETag.replace(/"/g, "") : undefined,
             mount_id: mount.id,
             storage_type: mount.storage_type,
             type: fileType, // 整数类型常量 (0-6)
@@ -199,11 +226,13 @@ export class S3FileOperations {
             }
           }
 
-          console.log(`getFileInfo - 文件[${result.name}], S3 ContentType[${headResponse.ContentType}]`);
+          console.log(`getFileInfo - ListObjects 成功获取文件信息: ${result.name}`);
           return result;
-        } catch (headError) {
-          // 如果HEAD失败，尝试GET请求（某些S3服务可能不支持HEAD）
-          if (headError.$metadata?.httpStatusCode === 405) {
+        } catch (listError) {
+          // 如果 ListObjects 失败，fallback 到 GET 方法
+          console.log(`getFileInfo - ListObjects 失败，fallback 到 GET 方法: ${listError.message}`);
+
+          try {
             const getParams = {
               Bucket: this.config.bucket_name,
               Key: s3SubPath,
@@ -214,16 +243,20 @@ export class S3FileOperations {
             const getResponse = await this.s3Client.send(getCommand);
 
             const fileName = path.split("/").filter(Boolean).pop() || "/";
-            const fileType = await GetFileType(fileName, db);
-            const fileTypeName = await getFileTypeName(fileName, db);
+
+            // 检查是否为目录：基于ContentType判断
+            const isDirectory = getResponse.ContentType === "application/x-directory";
+
+            const fileType = isDirectory ? FILE_TYPES.FOLDER : await GetFileType(fileName, db);
+            const fileTypeName = isDirectory ? FILE_TYPE_NAMES[FILE_TYPES.FOLDER] : await getFileTypeName(fileName, db);
 
             const result = {
               path: path,
               name: fileName,
-              isDirectory: false,
-              size: getResponse.ContentLength || 0,
+              isDirectory: isDirectory,
+              size: isDirectory ? 0 : getResponse.ContentLength || 0, // 目录大小为0
               modified: getResponse.LastModified ? getResponse.LastModified.toISOString() : new Date().toISOString(),
-              contentType: getResponse.ContentType || "application/octet-stream",
+              mimetype: getResponse.ContentType || "application/octet-stream", // 统一使用mimetype字段名
               etag: getResponse.ETag ? getResponse.ETag.replace(/"/g, "") : undefined,
               mount_id: mount.id,
               storage_type: mount.storage_type,
@@ -275,14 +308,14 @@ export class S3FileOperations {
 
             console.log(`getFileInfo(GET) - 文件[${result.name}], S3 ContentType[${getResponse.ContentType}]`);
             return result;
-          }
+          } catch (getError) {
+            // 检查是否是NotFound错误，转换为HTTPException
+            if (getError.$metadata?.httpStatusCode === 404 || getError.name === "NotFound") {
+              throw new HTTPException(ApiStatus.NOT_FOUND, { message: "文件不存在" });
+            }
 
-          // 检查是否是NotFound错误，转换为HTTPException
-          if (headError.$metadata?.httpStatusCode === 404 || headError.name === "NotFound") {
-            throw new HTTPException(ApiStatus.NOT_FOUND, { message: "文件不存在" });
+            throw getError;
           }
-
-          throw headError;
         }
       },
       "获取文件信息",
@@ -351,19 +384,19 @@ export class S3FileOperations {
    */
   async exists(s3SubPath) {
     try {
-      const headParams = {
+      const listParams = {
         Bucket: this.config.bucket_name,
-        Key: s3SubPath,
+        Prefix: s3SubPath,
+        MaxKeys: 1,
       };
 
-      const headCommand = new HeadObjectCommand(headParams);
-      await this.s3Client.send(headCommand);
+      const listCommand = new ListObjectsV2Command(listParams);
+      const listResponse = await this.s3Client.send(listCommand);
 
-      return true;
+      // 检查是否找到精确匹配的文件
+      const exactMatch = listResponse.Contents?.find((item) => item.Key === s3SubPath);
+      return !!exactMatch;
     } catch (error) {
-      if (error.$metadata && error.$metadata.httpStatusCode === 404) {
-        return false;
-      }
       return false;
     }
   }
@@ -395,17 +428,26 @@ export class S3FileOperations {
         // 首先检查文件是否存在，获取原始元数据
         let originalMetadata = null;
         try {
-          const headParams = {
+          const listParams = {
             Bucket: this.config.bucket_name,
-            Key: s3SubPath,
+            Prefix: s3SubPath,
+            MaxKeys: 1,
           };
-          const headCommand = new HeadObjectCommand(headParams);
-          originalMetadata = await this.s3Client.send(headCommand);
-        } catch (error) {
-          if (error.$metadata?.httpStatusCode !== 404) {
-            console.warn(`获取原始文件元数据失败: ${error.message}`);
+          const listCommand = new ListObjectsV2Command(listParams);
+          const listResponse = await this.s3Client.send(listCommand);
+
+          // 检查是否找到精确匹配的文件
+          const exactMatch = listResponse.Contents?.find((item) => item.Key === s3SubPath);
+          if (exactMatch) {
+            originalMetadata = {
+              LastModified: exactMatch.LastModified,
+              ETag: exactMatch.ETag,
+              Size: exactMatch.Size,
+            };
           }
-          // 404错误表示文件不存在，这是正常的（创建新文件）
+        } catch (error) {
+          console.warn(`获取原始文件元数据失败: ${error.message}`);
+          // 错误表示无法获取元数据，这是正常的（创建新文件）
         }
 
         const putParams = {
@@ -426,7 +468,7 @@ export class S3FileOperations {
           success: true,
           path: s3SubPath,
           etag: result.ETag ? result.ETag.replace(/"/g, "") : undefined,
-          contentType: contentType,
+          mimetype: contentType,
           message: "文件更新成功",
           isNewFile: !originalMetadata,
         };
@@ -447,29 +489,15 @@ export class S3FileOperations {
     return handleFsError(
       async () => {
         // 检查源文件是否存在
-        const headParams = {
-          Bucket: this.config.bucket_name,
-          Key: oldS3SubPath,
-        };
-        const headCommand = new HeadObjectCommand(headParams);
-        await this.s3Client.send(headCommand);
+        const sourceExists = await this.exists(oldS3SubPath);
+        if (!sourceExists) {
+          throw new HTTPException(ApiStatus.NOT_FOUND, { message: "源文件不存在" });
+        }
 
         // 检查目标文件是否已存在
-        try {
-          const targetHeadParams = {
-            Bucket: this.config.bucket_name,
-            Key: newS3SubPath,
-          };
-          const targetHeadCommand = new HeadObjectCommand(targetHeadParams);
-          await this.s3Client.send(targetHeadCommand);
-
-          // 如果没有抛出异常，说明目标文件已存在
+        const targetExists = await this.exists(newS3SubPath);
+        if (targetExists) {
           throw new HTTPException(ApiStatus.CONFLICT, { message: "目标文件已存在" });
-        } catch (error) {
-          if (error.$metadata?.httpStatusCode !== 404) {
-            throw error; // 如果不是404错误，说明是其他问题
-          }
-          // 404表示目标文件不存在，可以继续重命名
         }
 
         // 复制文件到新位置
@@ -515,24 +543,15 @@ export class S3FileOperations {
 
     try {
       // 检查源文件是否存在
-      const headParams = {
-        Bucket: this.config.bucket_name,
-        Key: sourceS3SubPath,
-      };
-
-      const headCommand = new HeadObjectCommand(headParams);
-      await this.s3Client.send(headCommand);
+      const sourceExists = await this.exists(sourceS3SubPath);
+      if (!sourceExists) {
+        throw new HTTPException(ApiStatus.NOT_FOUND, { message: "源文件不存在" });
+      }
 
       // 检查目标文件是否已存在
       if (skipExisting) {
-        try {
-          const targetHeadParams = {
-            Bucket: this.config.bucket_name,
-            Key: targetS3SubPath,
-          };
-          const targetHeadCommand = new HeadObjectCommand(targetHeadParams);
-          await this.s3Client.send(targetHeadCommand);
-
+        const targetExists = await this.exists(targetS3SubPath);
+        if (targetExists) {
           // 文件已存在，跳过
           return {
             success: true,
@@ -541,11 +560,6 @@ export class S3FileOperations {
             target: targetS3SubPath,
             message: "文件已存在，跳过复制",
           };
-        } catch (error) {
-          if (error.$metadata?.httpStatusCode !== 404) {
-            throw error;
-          }
-          // 404表示文件不存在，可以继续复制
         }
       }
 

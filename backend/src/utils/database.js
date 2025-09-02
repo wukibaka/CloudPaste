@@ -406,8 +406,14 @@ export async function initDatabase(db) {
   // 创建索引
   await createIndexes(db);
 
-  // 初始化默认数据
-  await initDefaultSettings(db);
+  // 初始化完整的默认设置
+  await initDefaultSettings(db); // 基础设置 (4个)
+  await addPreviewSettings(db); // 预览设置 (6个)
+  await addSiteSettings(db); // 站点设置 (5个)
+  await addCustomContentSettings(db); // 自定义内容设置 (2个)
+  await addFileNamingStrategySetting(db); // 文件命名策略设置 (1个)
+  await addDefaultProxySetting(db); // 默认代理设置 (1个)
+
   await createDefaultAdmin(db);
 
   console.log("数据库初始化完成");
@@ -627,25 +633,113 @@ async function recordMigration(db, version) {
 async function migrateFilesTableToMultiStorage(db) {
   console.log("开始迁移files表到多存储类型支持...");
 
-  await addTableField(db, DbTables.FILES, "storage_config_id", "storage_config_id TEXT");
-  await addTableField(db, DbTables.FILES, "storage_type", "storage_type TEXT");
-  await addTableField(db, DbTables.FILES, "file_path", "file_path TEXT");
-
-  // 迁移现有数据
   try {
-    const updateResult = await db
-      .prepare(
-        `UPDATE ${DbTables.FILES}
-         SET storage_config_id = s3_config_id, storage_type = 'S3'
-         WHERE s3_config_id IS NOT NULL
-           AND (storage_config_id IS NULL OR storage_type IS NULL)`
-      )
-      .run();
+    // 检查当前表结构
+    const columnInfo = await db.prepare(`PRAGMA table_info(${DbTables.FILES})`).all();
+    const existingColumns = new Set(columnInfo.results.map((col) => col.name));
 
-    console.log(`成功迁移 ${updateResult.changes || 0} 条files记录`);
+    const hasOldField = existingColumns.has("s3_config_id");
+    const hasNewField = existingColumns.has("storage_config_id");
+
+    console.log(`表结构检查: s3_config_id=${hasOldField}, storage_config_id=${hasNewField}`);
+
+    // 添加新字段（如果不存在）
+    if (!hasNewField) {
+      console.log("添加新字段...");
+      await addTableField(db, DbTables.FILES, "storage_config_id", "storage_config_id TEXT");
+      await addTableField(db, DbTables.FILES, "storage_type", "storage_type TEXT");
+      await addTableField(db, DbTables.FILES, "file_path", "file_path TEXT");
+    }
+
+    // 如果有旧字段，先迁移数据
+    if (hasOldField) {
+      console.log("开始迁移数据...");
+
+      // 迁移数据
+      const updateResult = await db
+        .prepare(
+          `UPDATE ${DbTables.FILES}
+           SET storage_config_id = s3_config_id, storage_type = 'S3'
+           WHERE s3_config_id IS NOT NULL
+             AND (storage_config_id IS NULL OR storage_type IS NULL)`
+        )
+        .run();
+
+      console.log(`成功迁移 ${updateResult.changes || 0} 条files记录`);
+    }
+
+    // 无论如何都重建表，确保最终结构正确
+    console.log("重建表结构，确保最终结构正确...");
+    await rebuildFilesTable(db);
+
+    console.log("files表迁移完成");
   } catch (error) {
-    console.error("迁移files表数据时出错:", error);
+    console.error("迁移files表时出错:", error);
+    throw error;
   }
+}
+
+/**
+ * 重建files表，删除旧字段
+ * @param {D1Database} db - D1数据库实例
+ */
+async function rebuildFilesTable(db) {
+  console.log("开始重建files表结构...");
+
+  // 创建新表结构
+  await db
+    .prepare(
+      `CREATE TABLE ${DbTables.FILES}_new (
+        id TEXT PRIMARY KEY,
+        slug TEXT UNIQUE NOT NULL,
+        filename TEXT NOT NULL,
+        storage_config_id TEXT NOT NULL,
+        storage_type TEXT NOT NULL,
+        storage_path TEXT NOT NULL,
+        file_path TEXT,
+        mimetype TEXT NOT NULL,
+        size INTEGER NOT NULL,
+        etag TEXT,
+        remark TEXT,
+        password TEXT,
+        expires_at DATETIME,
+        max_views INTEGER,
+        views INTEGER DEFAULT 0,
+        use_proxy BOOLEAN DEFAULT 0,
+        created_by TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`
+    )
+    .run();
+
+  // 复制数据到新表
+  await db
+    .prepare(
+      `INSERT INTO ${DbTables.FILES}_new
+       SELECT id, slug, filename, storage_config_id, storage_type, storage_path, file_path,
+              mimetype, size, etag, remark, password, expires_at, max_views, views, use_proxy,
+              created_by, created_at, updated_at
+       FROM ${DbTables.FILES}
+       WHERE storage_config_id IS NOT NULL AND storage_config_id != ''`
+    )
+    .run();
+
+  // 删除旧表
+  await db.prepare(`DROP TABLE ${DbTables.FILES}`).run();
+
+  // 重命名新表
+  await db.prepare(`ALTER TABLE ${DbTables.FILES}_new RENAME TO ${DbTables.FILES}`).run();
+
+  // 重新创建索引
+  await db.prepare(`CREATE INDEX IF NOT EXISTS idx_files_slug ON ${DbTables.FILES}(slug)`).run();
+  await db.prepare(`CREATE INDEX IF NOT EXISTS idx_files_storage_config_id ON ${DbTables.FILES}(storage_config_id)`).run();
+  await db.prepare(`CREATE INDEX IF NOT EXISTS idx_files_storage_type ON ${DbTables.FILES}(storage_type)`).run();
+  await db.prepare(`CREATE INDEX IF NOT EXISTS idx_files_file_path ON ${DbTables.FILES}(file_path)`).run();
+  await db.prepare(`CREATE INDEX IF NOT EXISTS idx_files_created_at ON ${DbTables.FILES}(created_at)`).run();
+  await db.prepare(`CREATE INDEX IF NOT EXISTS idx_files_expires_at ON ${DbTables.FILES}(expires_at)`).run();
+
+  console.log("成功重建files表结构");
 }
 
 /**
@@ -770,7 +864,8 @@ async function addPreviewSettings(db) {
   const previewSettings = [
     {
       key: "preview_text_types",
-      value: "txt,htm,html,xml,java,properties,sql,js,md,json,conf,ini,vue,php,py,bat,yml,go,sh,c,cpp,h,hpp,tsx,vtt,srt,ass,rs,lrc,dockerfile,makefile,gitignore,license,readme",
+      value:
+        "txt,htm,html,xml,java,properties,sql,js,md,json,conf,ini,vue,php,py,bat,yml,yaml,go,sh,c,cpp,h,hpp,tsx,vtt,srt,ass,rs,lrc,dockerfile,makefile,gitignore,license,readme",
       description: "支持预览的文本文件扩展名，用逗号分隔",
       type: "textarea",
       group_id: 2,
@@ -802,6 +897,24 @@ async function addPreviewSettings(db) {
       type: "textarea",
       group_id: 2,
       sort_order: 4,
+      flags: 0,
+    },
+    {
+      key: "preview_office_types",
+      value: "doc,docx,xls,xlsx,ppt,pptx,rtf",
+      description: "支持预览的Office文档扩展名（需要在线转换），用逗号分隔",
+      type: "textarea",
+      group_id: 2,
+      sort_order: 5,
+      flags: 0,
+    },
+    {
+      key: "preview_document_types",
+      value: "pdf",
+      description: "支持预览的文档文件扩展名（可直接预览），用逗号分隔",
+      type: "textarea",
+      group_id: 2,
+      sort_order: 6,
       flags: 0,
     },
   ];
@@ -849,9 +962,28 @@ async function addFileNamingStrategySetting(db) {
         `INSERT INTO ${DbTables.SYSTEM_SETTINGS} (key, value, description, type, group_id, options, sort_order, flags, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`
       )
-      .bind("file_naming_strategy", "overwrite", "文件命名策略：覆盖模式使用原始文件名（可能冲突），随机后缀模式避免冲突且保持文件名可读性。", 1, options, 4, 0)
+      .bind("file_naming_strategy", "overwrite", "文件命名策略：覆盖模式使用原始文件名（可能冲突），随机后缀模式避免冲突且保持文件名可读性。", "select", 1, options, 4, 0)
       .run();
     console.log("成功添加文件命名策略设置");
+  }
+}
+
+/**
+ * 添加默认代理设置
+ * @param {D1Database} db - D1数据库实例
+ */
+async function addDefaultProxySetting(db) {
+  console.log("开始添加默认代理设置...");
+
+  const existing = await db.prepare(`SELECT key FROM ${DbTables.SYSTEM_SETTINGS} WHERE key = ?`).bind("default_use_proxy").first();
+  if (!existing) {
+    await db
+      .prepare(
+        `INSERT INTO ${DbTables.SYSTEM_SETTINGS} (key, value, description, type, group_id, sort_order, flags, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`
+      )
+      .bind("default_use_proxy", "false", "文件管理的默认代理设置。启用后新上传文件默认使用Worker代理，禁用后默认使用直链。", "bool", 1, 5, 0)
+      .run();
   }
 }
 

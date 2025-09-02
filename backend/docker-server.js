@@ -18,7 +18,8 @@ import { checkAndInitDatabase } from "./src/utils/database.js";
 import app from "./src/index.js";
 import { ApiStatus } from "./src/constants/index.js";
 
-import { getWebDAVConfig, getPlatformConfig } from "./src/webdav/auth/index.js";
+import { setExpressWebDAVHeaders } from "./src/webdav/utils/headerUtils.js";
+import { getWebDAVConfig } from "./src/webdav/auth/config/WebDAVConfig.js";
 
 // ES模块兼容性处理：获取__dirname
 const __filename = fileURLToPath(import.meta.url);
@@ -222,9 +223,6 @@ function createErrorResponse(error, status = ApiStatus.INTERNAL_ERROR, defaultMe
 const server = express();
 const PORT = process.env.PORT || 8787;
 
-// 获取Express平台配置（仅用于代理设置）
-const platformConfig = getPlatformConfig("express");
-
 // 数据目录和数据库设置
 const dataDir = process.env.DATA_DIR || path.join(__dirname, "data");
 if (!fs.existsSync(dataDir)) {
@@ -245,20 +243,14 @@ let isDbInitialized = false;
 // 获取WebDAV配置
 const webdavConfig = getWebDAVConfig();
 
-// 应用Express平台配置
-if (platformConfig.TRUST_PROXY) {
-  server.set("trust proxy", true);
-  console.log("Express: 已启用代理信任");
-}
-
-// CORS配置 - 使用统一配置
+// CORS配置
 const corsOptions = {
-  origin: webdavConfig.CORS.ALLOW_ORIGIN,
-  methods: webdavConfig.SUPPORTED_METHODS.join(","),
+  origin: "*",
+  methods: webdavConfig.METHODS.join(","),
   credentials: true,
   optionsSuccessStatus: 204,
   maxAge: 86400,
-  exposedHeaders: webdavConfig.CORS.ALLOW_HEADERS,
+  exposedHeaders: webdavConfig.HEADERS["Access-Control-Expose-Headers"],
 };
 
 // ==========================================
@@ -266,7 +258,7 @@ const corsOptions = {
 // ==========================================
 
 // 明确告知Express处理WebDAV方法
-webdavConfig.SUPPORTED_METHODS.forEach((method) => {
+webdavConfig.METHODS.forEach((method) => {
   server[method.toLowerCase()] = function (path, ...handlers) {
     return server.route(path).all(function (req, res, next) {
       if (req.method === method) {
@@ -278,7 +270,7 @@ webdavConfig.SUPPORTED_METHODS.forEach((method) => {
 });
 
 // 为WebDAV方法添加直接路由，确保它们能被正确处理
-webdavConfig.SUPPORTED_METHODS.forEach((method) => {
+webdavConfig.METHODS.forEach((method) => {
   server[method.toLowerCase()]("/dav*", (req, res, next) => {
     logMessage("debug", `直接WebDAV路由处理: ${method} ${req.path}`);
     next();
@@ -291,24 +283,36 @@ webdavConfig.SUPPORTED_METHODS.forEach((method) => {
 
 // 1. 基础中间件 - CORS和HTTP方法处理
 // ==========================================
-server.use(cors(corsOptions));
+// 智能CORS处理：跳过WebDAV OPTIONS请求和根路径OPTIONS请求，让后续中间件处理
+server.use((req, res, next) => {
+  // 对于WebDAV路径和根路径的OPTIONS请求，跳过CORS自动处理
+  if (req.method === "OPTIONS" && (req.path === "/" || req.path === "/dav" || req.path.startsWith("/dav/"))) {
+    logMessage("debug", `跳过CORS处理: ${req.method} ${req.path}`);
+    return next();
+  }
+  // 其他请求使用标准CORS处理
+  cors(corsOptions)(req, res, next);
+});
 server.use(methodOverride("X-HTTP-Method-Override"));
 server.use(methodOverride("X-HTTP-Method"));
 server.use(methodOverride("X-Method-Override"));
 server.disable("x-powered-by");
 
-// WebDAV基础方法支持 - 使用统一配置
+// WebDAV基础方法支持
 server.use((req, res, next) => {
-  if (req.path.startsWith("/dav")) {
-    res.setHeader("Access-Control-Allow-Methods", webdavConfig.SUPPORTED_METHODS.join(","));
-    res.setHeader("Allow", webdavConfig.SUPPORTED_METHODS.join(","));
+  if (req.path === "/dav" || req.path.startsWith("/dav/")) {
+    // 使用统一的WebDAV头部设置工具
+    setExpressWebDAVHeaders(res);
 
-    // 对于OPTIONS请求，直接响应以支持预检请求
+    // 区分CORS预检请求和WebDAV OPTIONS请求
     if (req.method === "OPTIONS") {
-      // 添加WebDAV特定的响应头
-      res.setHeader("DAV", webdavConfig.PROTOCOL.RESPONSE_HEADERS.DAV);
-      res.setHeader("MS-Author-Via", webdavConfig.PROTOCOL.RESPONSE_HEADERS["MS-Author-Via"]);
-      return res.status(204).end();
+      // 检查是否为CORS预检请求
+      const isCORSPreflight = req.headers.origin && req.headers["access-control-request-method"];
+
+      if (isCORSPreflight) {
+        // CORS预检请求：在Express层直接处理
+        return res.status(204).end();
+      }
     }
   }
   next();
@@ -382,7 +386,7 @@ server.use((req, res, next) => {
 server.use(
   express.raw({
     type: ["application/xml", "text/xml", "application/octet-stream"],
-    limit: "5gb", 
+    limit: "5gb",
     verify: (req, res, buf, encoding) => {
       // 对于WebDAV方法，特别是MKCOL，记录详细信息以便调试
       if ((req.method === "MKCOL" || req.method === "PUT") && buf && buf.length > 10 * 1024 * 1024) {
@@ -478,7 +482,7 @@ server.use(
 // WebDAV请求日志记录
 server.use((req, res, next) => {
   // 仅记录关键WebDAV操作，减少不必要的日志
-  if (["MKCOL", "COPY", "MOVE", "DELETE", "PUT"].includes(req.method) && req.path.startsWith("/dav")) {
+  if (["MKCOL", "COPY", "MOVE", "DELETE", "PUT"].includes(req.method) && (req.path === "/dav" || req.path.startsWith("/dav/"))) {
     logMessage("debug", `关键WebDAV请求: ${req.method} ${req.path}`);
   }
 
@@ -488,7 +492,7 @@ server.use((req, res, next) => {
 // WebDAV请求日志记录 - 认证由Hono层处理
 server.use("/dav", (req, res, next) => {
   // 明确设置允许的方法
-  res.setHeader("Allow", webdavConfig.SUPPORTED_METHODS.join(","));
+  res.setHeader("Allow", webdavConfig.METHODS.join(","));
 
   // 记录WebDAV请求信息
   logMessage("info", `WebDAV请求: ${req.method} ${req.path}`, {
@@ -531,6 +535,25 @@ server.use(async (req, res, next) => {
 // ==========================================
 // 路由处理
 // ==========================================
+
+// 根路径WebDAV OPTIONS兼容性处理器
+// 为1Panel等客户端提供WebDAV能力发现支持
+server.options("/", (req, res) => {
+  // 返回标准WebDAV能力声明，与/dav路径保持一致
+  const headers = {
+    Allow: "OPTIONS, PROPFIND, GET, HEAD, PUT, DELETE, MKCOL, COPY, MOVE, LOCK, UNLOCK, PROPPATCH",
+    DAV: "1, 2",
+    "MS-Author-Via": "DAV",
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "OPTIONS, PROPFIND, GET, HEAD, PUT, DELETE, MKCOL, COPY, MOVE, LOCK, UNLOCK, PROPPATCH",
+    "Access-Control-Allow-Headers": "Authorization, Content-Type, Depth, Destination, If, Lock-Token, Overwrite, X-Custom-Auth-Key",
+    "Access-Control-Expose-Headers": "DAV, Lock-Token, MS-Author-Via",
+    "Access-Control-Max-Age": "86400",
+  };
+
+  logMessage("info", "根路径WebDAV OPTIONS请求 - 客户端兼容性支持");
+  res.set(headers).status(200).end();
+});
 
 // 通配符路由 - 处理所有其他API请求
 server.use("*", async (req, res) => {

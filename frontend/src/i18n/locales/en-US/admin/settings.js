@@ -41,6 +41,13 @@ export default {
   account: {
     title: "Account Management",
     description: "Manage administrator account information, including username and password modification",
+    apiKeyTitle: "Account Information",
+    apiKeyDescription: "View your account information",
+    apiKeyInfo: {
+      title: "Account Information",
+      keyName: "Key Name",
+      basicPath: "Basic Path",
+    },
     adminInfo: {
       title: "Administrator Information Modification",
       description: "Modify administrator username and password",
@@ -81,7 +88,7 @@ export default {
       title: "WebDAV Upload Settings",
       description: "Configure WebDAV client upload processing method",
       uploadModeLabel: "WebDAV Upload Mode",
-      uploadModeHint: "Select the upload processing method for the WebDAV client. For worker deployment, it is recommended to use only the direct upload mode.",
+      uploadModeHint: "Select the upload processing method for the WebDAV client.",
       modes: {
         direct: "Direct Upload",
         multipart: "Multipart Upload",

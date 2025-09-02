@@ -210,9 +210,15 @@ fsRoutes.options("/api/fs/multipart/part", (c) => {
 fsRoutes.get("/api/fs/list", authGateway.requireMount(), unifiedFsAuthMiddleware, async (c) => {
   const db = c.env.DB;
   const path = c.req.query("path") || "/";
+  const refresh = c.req.query("refresh") === "true";
   const userInfo = c.get("userInfo");
   const { userIdOrInfo, userType } = getServiceParams(userInfo);
   const encryptionSecret = c.env.ENCRYPTION_SECRET;
+
+  // 调试日志：记录refresh参数
+  if (refresh) {
+    console.log("[后端路由] 收到强制刷新请求:", { path, refresh });
+  }
 
   try {
     // 对于API密钥用户，检查请求路径是否在基本路径权限范围内
@@ -244,8 +250,8 @@ fsRoutes.get("/api/fs/list", authGateway.requireMount(), unifiedFsAuthMiddleware
     const mountManager = new MountManager(db, encryptionSecret);
     const fileSystem = new FileSystem(mountManager);
 
-    // 调用FileSystem的listDirectory方法
-    const result = await fileSystem.listDirectory(path, userIdOrInfo, userType);
+    // 调用FileSystem的listDirectory方法，传递refresh选项
+    const result = await fileSystem.listDirectory(path, userIdOrInfo, userType, { refresh });
 
     return c.json({
       code: ApiStatus.SUCCESS,
@@ -1199,7 +1205,7 @@ fsRoutes.post("/api/fs/batch-copy", authGateway.requireMountCopy(), unifiedFsAut
 
       return c.json({
         code: ApiStatus.SUCCESS,
-        message: `批量复制请求处理完成，包含跨存储操作`,
+        message: "FILE_COPY_SUCCESS", // 标准消息标识，让前端统一生成消息
         data: {
           crossStorage: true,
           requiresClientSideCopy: true,
@@ -1219,7 +1225,7 @@ fsRoutes.post("/api/fs/batch-copy", authGateway.requireMountCopy(), unifiedFsAut
     // 返回标准复制结果
     return c.json({
       code: ApiStatus.SUCCESS,
-      message: `批量复制完成，成功: ${totalSuccess}，跳过: ${totalSkipped}，失败: ${totalFailed}`,
+      message: "FILE_COPY_SUCCESS",
       data: {
         crossStorage: false,
         success: totalSuccess,
@@ -1316,20 +1322,13 @@ fsRoutes.post("/api/fs/batch-copy-commit", authGateway.requireMountCopy(), unifi
     // 如果有失败且没有任何成功的项目，则认为完全失败
     const overallSuccess = hasSuccess;
 
-    // 生成合适的消息
-    let message;
-    if (hasFailures && hasSuccess) {
-      message = `批量复制部分完成，成功: ${results.success.length}，失败: ${results.failed.length}`;
-    } else if (hasFailures) {
-      message = `批量复制失败，成功: ${results.success.length}，失败: ${results.failed.length}`;
-    } else {
-      message = `批量复制完成，成功: ${results.success.length}，失败: ${results.failed.length}`;
-    }
-
     return c.json({
       code: overallSuccess ? ApiStatus.SUCCESS : ApiStatus.ACCEPTED,
-      message: message,
-      data: results,
+      message: "FILE_COPY_SUCCESS", // 标准消息标识，让前端统一生成消息
+      data: {
+        ...results,
+        crossStorage: true, // 标记为跨存储复制提交
+      },
       success: overallSuccess,
     });
   } catch (error) {

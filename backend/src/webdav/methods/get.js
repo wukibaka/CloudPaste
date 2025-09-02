@@ -6,6 +6,7 @@
 import { MountManager } from "../../storage/managers/MountManager.js";
 import { FileSystem } from "../../storage/fs/FileSystem.js";
 import { handleWebDAVError, createWebDAVErrorResponse } from "../utils/errorUtils.js";
+import { addWebDAVHeaders, getStandardWebDAVHeaders } from "../utils/headerUtils.js";
 import { getEffectiveMimeType } from "../../utils/fileUtils.js";
 
 /**
@@ -156,10 +157,12 @@ export async function handleGet(c, path, userId, userType, db) {
 
       return new Response(null, {
         status: 302,
-        headers: {
-          Location: presignedResult.presignedUrl,
-          "Cache-Control": "no-cache",
-        },
+        headers: getStandardWebDAVHeaders({
+          customHeaders: {
+            Location: presignedResult.presignedUrl,
+            "Cache-Control": "no-cache",
+          },
+        }),
       });
     } else {
       // 代理模式（默认）：使用FileSystem下载文件
@@ -176,10 +179,13 @@ export async function handleGet(c, path, userId, userType, db) {
       updatedHeaders.set("Accept-Ranges", "bytes");
       updatedHeaders.set("Cache-Control", "max-age=3600");
 
-      return new Response(fileResponse.body, {
+      // 创建响应并添加WebDAV标准头部
+      const response = new Response(fileResponse.body, {
         status: fileResponse.status,
         headers: updatedHeaders,
       });
+
+      return addWebDAVHeaders(response);
     }
   } catch (error) {
     // 使用统一的错误处理

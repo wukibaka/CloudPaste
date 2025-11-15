@@ -1,5 +1,7 @@
 import crypto from "crypto";
 import { DbTables } from "../constants/index.js";
+import { ValidationError, RepositoryError } from "../http/errors.js";
+import { StorageConfigUtils } from "../storage/utils/StorageConfigUtils.js";
 
 /**
  * 数据备份与还原服务
@@ -14,7 +16,7 @@ export class BackupService {
       text_management: ["pastes", "paste_passwords"],
       file_management: ["files", "file_passwords"],
       mount_management: ["storage_mounts"],
-      storage_config: ["s3_configs"],
+      storage_config: ["storage_configs"],
       key_management: ["api_keys"],
       account_management: ["admins", "admin_tokens"],
       system_settings: ["system_settings"],
@@ -26,8 +28,8 @@ export class BackupService {
       paste_passwords: ["pastes"],
       file_passwords: ["files"],
       admin_tokens: ["admins"],
-      s3_configs: ["admins"], // s3_configs.admin_id -> admins.id
-      storage_mounts: ["s3_configs"], // storage_mounts.storage_config_id -> s3_configs.id
+      storage_configs: ["admins"], // storage_configs.admin_id -> admins.id
+      storage_mounts: ["storage_configs"], // storage_mounts.storage_config_id -> storage_configs.id
     };
   }
 
@@ -57,7 +59,7 @@ export class BackupService {
       // 模块备份 - 根据选中的模块确定表
       tables = this.getTablesFromModules(finalModules);
     } else {
-      throw new Error("不支持的备份类型");
+      throw new ValidationError("不支持的备份类型");
     }
 
     // 导出数据
@@ -131,8 +133,8 @@ export class BackupService {
 
     let { data } = backupData;
 
-    // 进行 admin_id 映射（覆盖和合并模式）
-    if (currentAdminId && (mode === "merge" || mode === "overwrite")) {
+    // 进行 admin_id 映射（仅合并模式需要挂接到现有管理员）
+    if (currentAdminId && mode === "merge") {
       data = this.mapAdminIds(data, currentAdminId);
     }
 
@@ -238,7 +240,7 @@ export class BackupService {
       };
     } catch (error) {
       console.error("还原备份失败:", error);
-      throw new Error(`还原备份失败: ${error.message}`);
+      throw new RepositoryError(`还原备份失败: ${error.message}`);
     }
   }
 
@@ -303,27 +305,25 @@ export class BackupService {
     // 检查 storage_mounts 的依赖
     if (data.storage_mounts) {
       for (const mount of data.storage_mounts) {
-        if (mount.storage_config_id && mount.storage_type === "S3") {
-          // 检查对应的 s3_configs 是否存在于备份数据中
-          const hasS3Config = data.s3_configs?.some((config) => config.id === mount.storage_config_id);
-          if (!hasS3Config) {
-            // 检查数据库中是否存在
+        if (mount.storage_config_id) {
+          // 通用检查：备份数据中是否包含此存储配置记录
+          const hasConfig = data.storage_configs?.some((config) => config.id === mount.storage_config_id);
+          if (!hasConfig) {
             try {
-              const existingConfig = await this.db.prepare(`SELECT id FROM s3_configs WHERE id = ?`).bind(mount.storage_config_id).first();
-
-              if (!existingConfig) {
+              const exists = await StorageConfigUtils.configExists(this.db, mount.storage_type || "S3", mount.storage_config_id);
+              if (!exists) {
                 issues.push({
                   type: "missing_dependency",
                   table: "storage_mounts",
                   record_id: mount.id,
                   record_name: mount.name,
-                  dependency_table: "s3_configs",
+                  dependency_table: "storage_configs",
                   dependency_id: mount.storage_config_id,
-                  message: `挂载点 "${mount.name}" 依赖的S3配置 "${mount.storage_config_id}" 不存在`,
+                  message: `挂载点 "${mount.name}" 依赖的存储配置 "${mount.storage_config_id}" 不存在`,
                 });
               }
             } catch (error) {
-              console.warn(`[BackupService] 检查S3配置依赖时出错: ${error.message}`);
+              console.warn(`[BackupService] 检查存储配置依赖时出错: ${error.message}`);
             }
           }
         }
@@ -422,14 +422,14 @@ export class BackupService {
 
     console.log(`[BackupService] 映射 admin_id 到当前管理员 ${currentAdminId}`);
 
-    // 处理 s3_configs 表
-    if (mappedData.s3_configs) {
-      const originalCount = mappedData.s3_configs.length;
-      mappedData.s3_configs = mappedData.s3_configs.map((record) => ({
+    // 处理 storage_configs 表
+    if (mappedData.storage_configs) {
+      const originalCount = mappedData.storage_configs.length;
+      mappedData.storage_configs = mappedData.storage_configs.map((record) => ({
         ...record,
         admin_id: currentAdminId,
       }));
-      console.log(`[BackupService] 映射 s3_configs 表：${originalCount} 条记录的 admin_id 已更新`);
+      console.log(`[BackupService] 映射 storage_configs 表：${originalCount} 条记录的 admin_id 已更新`);
     }
 
     // 处理 storage_mounts 表
@@ -583,21 +583,21 @@ export class BackupService {
    */
   validateBackupData(backupData) {
     if (!backupData || typeof backupData !== "object") {
-      throw new Error("无效的备份数据格式");
+      throw new ValidationError("无效的备份数据格式");
     }
 
     if (!backupData.metadata || !backupData.data) {
-      throw new Error("备份数据缺少必要的字段");
+      throw new ValidationError("备份数据缺少必要的字段");
     }
 
     if (!backupData.metadata.version || !backupData.metadata.timestamp) {
-      throw new Error("备份元数据不完整");
+      throw new ValidationError("备份元数据不完整");
     }
 
     // 验证校验和
     const calculatedChecksum = this.generateChecksum(backupData.data);
     if (backupData.metadata.checksum !== calculatedChecksum) {
-      throw new Error("备份数据校验失败，文件可能已损坏");
+      throw new ValidationError("备份数据校验失败，文件可能已损坏");
     }
   }
 
@@ -610,7 +610,7 @@ export class BackupService {
 
     for (const table of tables) {
       if (!validTables.includes(table)) {
-        throw new Error(`不支持的数据表: ${table}`);
+        throw new ValidationError(`不支持的数据表: ${table}`);
       }
     }
   }

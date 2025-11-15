@@ -1,6 +1,6 @@
 /**
- * S3Adapter for Uppy.js
- * 重构版本：内部模块化，保持对外API不变
+ * StorageAdapter for Uppy.js
+ * 内部模块化，保持对外API不变
  */
 
 import { useAuthStore } from "../../stores/authStore.js";
@@ -239,17 +239,17 @@ class PathResolver {
     this.currentPath = newPath;
   }
 
-  buildFullPathFromKey(s3Key) {
-    // 如果S3 Key已经包含完整路径，直接返回
-    if (s3Key.startsWith("/")) {
-      return s3Key;
+  buildFullPathFromKey(storageKey) {
+    // 如果storage key已经包含完整路径，直接返回
+    if (storageKey.startsWith("/")) {
+      return storageKey;
     }
 
     // 规范化当前路径，去掉末尾斜杠
     const normalizedCurrentPath = this.currentPath.replace(/\/+$/, "");
 
     // 提取文件名
-    const fileName = s3Key.split("/").pop();
+    const fileName = storageKey.split("/").pop();
 
     // 构建完整路径
     const result = `${normalizedCurrentPath}/${fileName}`;
@@ -269,7 +269,7 @@ class ErrorHandler {
 
   handleError(error, context, fallbackValue = null) {
     const errorMessage = error?.message || "未知错误";
-    console.error(`[S3Adapter] ${context}失败:`, errorMessage, error);
+    console.error(`[StorageAdapter] ${context}失败:`, errorMessage, error);
 
     // 调用自定义错误处理器
     if (this.config.onError && typeof this.config.onError === "function") {
@@ -301,7 +301,7 @@ class ErrorHandler {
 
 // ===== 主类 =====
 
-export class S3Adapter {
+export class StorageAdapter {
   constructor(currentPath, uppyInstance = null, options = {}) {
     // 配置初始化
     this.config = {
@@ -388,7 +388,7 @@ export class S3Adapter {
       return { failures: [] };
     }
 
-    console.log(`[S3Adapter] 开始批量commit ${successfulFiles.length} 个文件`);
+    console.log(`[StorageAdapter] 开始批量commit ${successfulFiles.length} 个文件`);
     const failures = [];
 
     // 并发处理commit，提高性能
@@ -397,7 +397,7 @@ export class S3Adapter {
         await this.commitPresignedUpload(file, file.response);
         return { file, success: true };
       } catch (error) {
-        console.error(`[S3Adapter] ❌ commit失败: ${file.name}`, error);
+        console.error(`[StorageAdapter] ❌ commit失败: ${file.name}`, error);
         failures.push({
           fileName: file.name,
           fileId: file.id,
@@ -415,10 +415,10 @@ export class S3Adapter {
     const successCount = results.filter((r) => r.status === "fulfilled" && r.value.success).length;
     const failureCount = failures.length;
 
-    console.log(`[S3Adapter] 批量commit完成: ${successCount}成功, ${failureCount}失败`);
+    console.log(`[StorageAdapter] 批量commit完成: ${successCount}成功, ${failureCount}失败`);
 
     if (failures.length > 0) {
-      console.warn(`[S3Adapter] commit失败详情:`, failures);
+      console.warn(`[StorageAdapter] commit失败详情:`, failures);
     }
 
     return {
@@ -455,7 +455,7 @@ export class S3Adapter {
 
   /**
    * 从localStorage获取已上传分片信息
-   * @param {string} key S3 Key
+   * @param {string} key storage key
    * @returns {Array} 已上传分片列表
    */
   getUploadedPartsFromStorage(key) {
@@ -464,7 +464,7 @@ export class S3Adapter {
 
   /**
    * 将已上传分片信息保存到localStorage
-   * @param {string} key S3 Key
+   * @param {string} key storage key
    * @param {Array} parts 已上传分片列表
    */
   saveUploadedPartsToStorage(key, parts) {
@@ -473,21 +473,21 @@ export class S3Adapter {
 
   /**
    * 从localStorage删除已上传分片信息
-   * @param {string} key S3 Key
+   * @param {string} key storage key
    */
   removeUploadedPartsFromStorage(key) {
     try {
       const storageKey = this.STORAGE_PREFIX + key;
       localStorage.removeItem(storageKey);
-      console.log(`[S3Adapter] 从localStorage删除分片缓存: ${key}`);
+      console.log(`[StorageAdapter] 从localStorage删除分片缓存: ${key}`);
     } catch (error) {
-      console.warn(`[S3Adapter] 从localStorage删除失败:`, error);
+      console.warn(`[StorageAdapter] 从localStorage删除失败:`, error);
     }
   }
 
   /**
    * 添加单个分片到localStorage缓存
-   * @param {string} key S3 Key
+   * @param {string} key storage key
    * @param {Object} part 分片信息 {PartNumber, ETag, Size}
    */
   addPartToStorage(key, part) {
@@ -496,7 +496,7 @@ export class S3Adapter {
 
   /**
    * 从服务器获取权威的已上传分片信息
-   * @param {string} key S3 Key
+   * @param {string} key storage key
    * @param {string} uploadId 上传ID
    * @param {string} fileName 文件名
    * @returns {Promise<Array>} 服务器端的权威分片列表
@@ -504,9 +504,9 @@ export class S3Adapter {
   async getServerUploadedParts(key, uploadId, fileName) {
     return this.errorHandler
       .retryOperation(async () => {
-        // 将S3 Key转换为完整的挂载点路径
+        // 将storage key转换为完整的挂载点路径
         const fullPath = this.buildFullPathFromKey(key);
-        console.log(`[S3Adapter] 从服务器获取分片信息: ${fullPath}`);
+        console.log(`[StorageAdapter] 从服务器获取分片信息: ${fullPath}`);
 
         const response = await fsApi.listMultipartParts(fullPath, uploadId, fileName);
 
@@ -521,7 +521,7 @@ export class S3Adapter {
           LastModified: part.lastModified,
         }));
 
-        console.log(`[S3Adapter] 服务器返回${serverParts.length}个分片信息`);
+        console.log(`[StorageAdapter] 服务器返回${serverParts.length}个分片信息`);
 
         // 更新localStorage缓存为服务器端数据
         this.saveUploadedPartsToStorage(key, serverParts);
@@ -535,21 +535,21 @@ export class S3Adapter {
 
   /**
    * 初始化已上传分片缓存（一次性从服务器获取数据）
-   * @param {string} key S3 Key
+   * @param {string} key storage key
    * @param {string} uploadId 上传ID
    * @param {string} fileName 文件名
    */
   async initializeUploadedPartsCache(key, uploadId, fileName) {
     try {
-      console.log(`[S3Adapter] 初始化分片缓存: ${key}`);
+      console.log(`[StorageAdapter] 初始化分片缓存: ${key}`);
 
       // 从服务器获取权威的已上传分片信息
       const serverParts = await this.getServerUploadedParts(key, uploadId, fileName);
 
-      console.log(`[S3Adapter] 缓存初始化完成，后续uploadPartBytes将直接使用缓存`);
+      console.log(`[StorageAdapter] 缓存初始化完成，后续uploadPartBytes将直接使用缓存`);
       return serverParts;
     } catch (error) {
-      console.error(`[S3Adapter] 初始化分片缓存失败:`, error);
+      console.error(`[StorageAdapter] 初始化分片缓存失败:`, error);
       // 失败时初始化为空缓存
       this.saveUploadedPartsToStorage(key, []);
       return [];
@@ -580,7 +580,7 @@ export class S3Adapter {
    */
   async getUploadParameters(file, options = {}) {
     try {
-      console.log(`[S3Adapter] 获取预签名URL上传参数: ${file.name}`);
+      console.log(`[StorageAdapter] 获取预签名URL上传参数: ${file.name}`);
 
       const response = await fsApi.getPresignedUploadUrl(this.currentPath, file.name, file.type, file.size);
 
@@ -593,9 +593,9 @@ export class S3Adapter {
         targetPath: response.data.targetPath,
         mountId: response.data.mountId,
         fileId: response.data.fileId,
-        s3Path: response.data.s3Path,
-        s3Url: response.data.s3Url,
-        s3ConfigId: response.data.s3ConfigId,
+        storagePath: response.data.storagePath,
+        publicUrl: response.data.publicUrl,
+        storageConfigId: response.data.storageConfigId,
         contentType: response.data.contentType,
       });
 
@@ -608,7 +608,7 @@ export class S3Adapter {
         },
       };
     } catch (error) {
-      console.error("[S3Adapter] 获取预签名URL上传参数失败:", error);
+      console.error("[StorageAdapter] 获取预签名URL上传参数失败:", error);
       throw error;
     }
   }
@@ -620,17 +620,17 @@ export class S3Adapter {
    */
   async createMultipartUpload(file) {
     try {
-      console.log(`[S3Adapter] 创建分片上传: ${file.name}`);
+      console.log(`[StorageAdapter] 创建分片上传: ${file.name}`);
 
       // 检查是否为ServerResume标记的可恢复上传
       if (file.meta.resumable && file.meta.existingUpload && file.meta.serverResume) {
         const existingUpload = file.meta.existingUpload;
-        console.log(`[S3Adapter] 尝试恢复现有上传: uploadId=${existingUpload.uploadId}, key=${existingUpload.key}`);
+        console.log(`[StorageAdapter] 尝试恢复现有上传: uploadId=${existingUpload.uploadId}, key=${existingUpload.key}`);
 
         try {
           // 1. 先验证uploadId有效性 - 使用完整的挂载点路径
           const fullPathForValidation = this.buildFullPathFromKey(existingUpload.key);
-          console.log(`[S3Adapter] 验证uploadId有效性: ${fullPathForValidation}`);
+          console.log(`[StorageAdapter] 验证uploadId有效性: ${fullPathForValidation}`);
           const listPartsResponse = await fsApi.listMultipartParts(fullPathForValidation, existingUpload.uploadId, file.name);
 
           if (!listPartsResponse.success) {
@@ -638,16 +638,16 @@ export class S3Adapter {
           }
 
           const uploadedParts = listPartsResponse.data.parts || [];
-          console.log(`[S3Adapter] 🔍 服务器返回: 找到${uploadedParts.length}个已上传分片`);
+          console.log(`[StorageAdapter] 🔍 服务器返回: 找到${uploadedParts.length}个已上传分片`);
 
           // 2. 计算需要刷新的分片编号
           const partSize = 5 * 1024 * 1024;
           const totalParts = Math.ceil(file.size / partSize);
           const partNumbers = Array.from({ length: totalParts }, (_, i) => i + 1);
 
-          // 3. 将S3 Key转换为完整的挂载点路径用于刷新URL
+          // 3. 将storage key转换为完整的挂载点路径用于刷新URL
           const fullPath = this.buildFullPathFromKey(existingUpload.key);
-          console.log(`[S3Adapter] 路径转换: S3Key=${existingUpload.key} -> FullPath=${fullPath}`);
+          console.log(`[StorageAdapter] 路径转换: StorageKey=${existingUpload.key} -> FullPath=${fullPath}`);
 
           // 4. 获取现有上传的预签名URL（需要刷新）
           const refreshResponse = await fsApi.refreshMultipartUrls(fullPath, existingUpload.uploadId, partNumbers);
@@ -669,7 +669,7 @@ export class S3Adapter {
 
           if (standardParts.length > 0) {
             const partNumbers = standardParts.map((p) => p.PartNumber).sort((a, b) => a - b);
-            console.log(`[S3Adapter] 服务器已上传分片: [${partNumbers.join(", ")}] (${progressPercent}%)`);
+            console.log(`[StorageAdapter] 服务器已上传分片: [${partNumbers.join(", ")}] (${progressPercent}%)`);
           }
 
           // 7. 缓存刷新后的预签名URL和已上传分片信息
@@ -686,17 +686,17 @@ export class S3Adapter {
           // 使用完整路径格式作为缓存key，与listParts保持一致
           const fullPathKey = this.buildFullPathFromKey(existingUpload.key);
           this.saveUploadedPartsToStorage(fullPathKey, standardParts);
-          console.log(`[S3Adapter] 缓存到localStorage: ${standardParts.length}个分片 -> ${fullPathKey}`);
+          console.log(`[StorageAdapter] 缓存到localStorage: ${standardParts.length}个分片 -> ${fullPathKey}`);
 
           // 重要：不要在这里手动设置进度，让Uppy通过listParts自然处理
 
-          console.log(`[S3Adapter] 断点续传恢复成功`);
+          console.log(`[StorageAdapter] 断点续传恢复成功`);
           return {
             uploadId: existingUpload.uploadId,
             key: existingUpload.key,
           };
         } catch (error) {
-          console.warn(`[S3Adapter] 断点续传失败，创建新上传: ${error.message}`);
+          console.warn(`[StorageAdapter] 断点续传失败，创建新上传: ${error.message}`);
 
           // 清除失效的上传标记
           if (this.uppyInstance) {
@@ -736,14 +736,14 @@ export class S3Adapter {
       // 使用完整路径格式作为缓存key
       const fullPathKey = this.buildFullPathFromKey(key);
       await this.initializeUploadedPartsCache(fullPathKey, uploadId, file.name);
-      console.log(`[S3Adapter] 新上传初始化完成，已检查服务器状态，缓存key=${fullPathKey}`);
+      console.log(`[StorageAdapter] 新上传初始化完成，已检查服务器状态，缓存key=${fullPathKey}`);
 
       return {
         uploadId,
         key,
       };
     } catch (error) {
-      console.error("[S3Adapter] 创建分片上传失败:", error);
+      console.error("[StorageAdapter] 创建分片上传失败:", error);
       throw error;
     }
   }
@@ -761,7 +761,7 @@ export class S3Adapter {
         throw new Error("找不到上传会话信息");
       }
 
-      console.log(`[S3Adapter] signPart被调用: 分片${partData.partNumber}`);
+      console.log(`[StorageAdapter] signPart被调用: 分片${partData.partNumber}`);
 
       // 不在signPart中处理已上传分片
       // 让Uppy通过listParts自然地处理断点续传
@@ -780,7 +780,7 @@ export class S3Adapter {
         },
       };
     } catch (error) {
-      console.error("[S3Adapter] 签名分片失败:", error);
+      console.error("[StorageAdapter] 签名分片失败:", error);
       throw error;
     }
   }
@@ -793,7 +793,7 @@ export class S3Adapter {
    */
   async completeMultipartUpload(file, data) {
     try {
-      console.log(`[S3Adapter] 完成分片上传: ${file.name}`);
+      console.log(`[StorageAdapter] 完成分片上传: ${file.name}`);
 
       const session = this.uploadSessions.get(file.id);
       if (!session) {
@@ -823,7 +823,7 @@ export class S3Adapter {
         location: response.data.url || `${session.path}/${session.fileName}`,
       };
     } catch (error) {
-      console.error("[S3Adapter] 完成分片上传失败:", error);
+      console.error("[StorageAdapter] 完成分片上传失败:", error);
       throw error;
     }
   }
@@ -835,7 +835,7 @@ export class S3Adapter {
    */
   async abortMultipartUpload(file, data) {
     try {
-      console.log(`[S3Adapter] 中止分片上传: ${file.name}`);
+      console.log(`[StorageAdapter] 中止分片上传: ${file.name}`);
 
       const session = this.uploadSessions.get(file.id);
       if (session) {
@@ -848,7 +848,7 @@ export class S3Adapter {
         }
       }
     } catch (error) {
-      console.error("[S3Adapter] 中止分片上传失败:", error);
+      console.error("[StorageAdapter] 中止分片上传失败:", error);
       // 中止操作失败不应该抛出错误，只记录日志
     }
   }
@@ -862,16 +862,31 @@ export class S3Adapter {
    */
   async listParts(file, { uploadId, key }) {
     try {
-      console.log(`[S3Adapter] listParts被调用: ${file.name}, uploadId: ${uploadId}, key: ${key}`);
+      console.log(`[StorageAdapter] listParts被调用: ${file.name}, uploadId: ${uploadId}, key: ${key}`);
 
-      // 直接从localStorage返回已上传分片信息
       const cachedParts = this.getUploadedPartsFromStorage(key);
-      console.log(`[S3Adapter] 从localStorage返回${cachedParts.length}个已上传分片`);
-      console.log(`[S3Adapter] 缓存的分片信息:`, cachedParts);
+      if (cachedParts.length > 0) {
+        console.log(`[StorageAdapter] 使用缓存的分片信息(${cachedParts.length})`);
+        return cachedParts;
+      }
 
-      return cachedParts;
+      console.log(`[StorageAdapter] 缓存为空，回源查询服务器`);
+      const response = await fsApi.listMultipartParts(key, uploadId, file.name);
+      if (!response?.success) {
+        throw new Error(response?.message || "listMultipartParts 失败");
+      }
+
+      const serverParts = (response.data?.parts || []).map((part) => ({
+        PartNumber: part.partNumber ?? part.PartNumber,
+        ETag: part.etag ?? part.ETag,
+        Size: part.size ?? part.Size ?? 0,
+      }));
+
+      this.saveUploadedPartsToStorage(key, serverParts);
+      console.log(`[StorageAdapter] 服务器返回${serverParts.length}个分片`);
+      return serverParts;
     } catch (error) {
-      console.error("[S3Adapter] listParts失败:", error);
+      console.error("[StorageAdapter] listParts失败:", error);
       return [];
     }
   }
@@ -890,26 +905,26 @@ export class S3Adapter {
         throw new Error("Cannot upload to an undefined URL");
       }
 
-      console.log(`[S3Adapter] uploadPartBytes被调用: ${url}`);
+      console.log(`[StorageAdapter] uploadPartBytes被调用: ${url}`);
 
       // 解析URL获取key和partNumber
       const urlObject = new URL(url);
       const pathParts = urlObject.pathname.split("/");
-      // 获取S3的相对路径（与createMultipartUpload返回的key格式一致）
-      const s3Key = pathParts.slice(1).join("/"); // 去掉第一个空字符串，获取完整路径
+      // 获取存储的相对路径（与createMultipartUpload返回的key格式一致）
+      const storageKey = pathParts.slice(1).join("/"); // 去掉第一个空字符串，获取完整路径
       const partNumber = parseInt(urlObject.searchParams.get("partNumber"), 10);
 
-      console.log(`[S3Adapter] 🔄 处理分片${partNumber}上传...`);
+      console.log(`[StorageAdapter] 🔄 处理分片${partNumber}上传...`);
 
-      // 将S3 Key转换为与listParts一致的完整路径格式
-      const key = this.buildFullPathFromKey(s3Key);
+      // 将storage key转换为与listParts一致的完整路径格式
+      const key = this.buildFullPathFromKey(storageKey);
 
       // 直接使用localStorage缓存（已在createMultipartUpload时一次性从服务器获取）
       const cachedParts = this.getUploadedPartsFromStorage(key);
       const existingPart = cachedParts.find((part) => part.PartNumber === partNumber);
 
       if (existingPart) {
-        console.log(`[S3Adapter] ✅ 分片${partNumber}已缓存，跳过上传 (ETag: ${existingPart.ETag})`);
+        console.log(`[StorageAdapter] ✅ 分片${partNumber}已缓存，跳过上传 (ETag: ${existingPart.ETag})`);
 
         // 模拟一个瞬间完成的上传过程，而不是直接跳过
         return new Promise((resolve) => {
@@ -928,14 +943,14 @@ export class S3Adapter {
       // 检查文件是否被自定义暂停
       const fileId = this.getFileIdFromUrl(url);
       if (fileId && this.isFilePaused(fileId)) {
-        console.log(`[S3Adapter] ⏸️ 分片${partNumber}被暂停，等待恢复...`);
+        console.log(`[StorageAdapter] ⏸️ 分片${partNumber}被暂停，等待恢复...`);
 
         // 返回一个等待恢复的Promise
         return new Promise((resolve, reject) => {
           const checkResumeInterval = setInterval(() => {
             if (!this.isFilePaused(fileId)) {
               clearInterval(checkResumeInterval);
-              console.log(`[S3Adapter] ▶️ 分片${partNumber}恢复上传`);
+              console.log(`[StorageAdapter] ▶️ 分片${partNumber}恢复上传`);
               // 递归调用自己来执行实际上传
               this.uploadPartBytes({ signature, body, onComplete, size, onProgress, signal }).then(resolve).catch(reject);
             }
@@ -983,7 +998,14 @@ export class S3Adapter {
           reject(err);
         };
 
-        xhr.upload.addEventListener("progress", onProgress);
+        const progressHandler = (evt) => {
+          try {
+            const loaded = evt?.loaded ?? 0;
+            const total = evt?.total ?? size;
+            onProgress?.({ loaded, total, lengthComputable: true });
+          } catch {}
+        };
+        xhr.upload.addEventListener("progress", progressHandler);
 
         xhr.addEventListener("load", (ev) => {
           cleanup();
@@ -996,7 +1018,7 @@ export class S3Adapter {
             return;
           }
 
-          onProgress(size);
+          try { onProgress?.({ loaded: size, total: size, lengthComputable: true }); } catch {}
 
           // 获取ETag
           const etag = target.getResponseHeader("ETag");
@@ -1012,7 +1034,7 @@ export class S3Adapter {
             Size: size,
           });
 
-          console.log(`[S3Adapter] 🚀 分片${partNumber}上传成功，添加到localStorage (ETag: ${etag})`);
+          console.log(`[StorageAdapter] 🚀 分片${partNumber}上传成功，添加到localStorage (ETag: ${etag})`);
 
           onComplete(etag);
           resolve({ ETag: etag });
@@ -1028,7 +1050,113 @@ export class S3Adapter {
         xhr.send(body);
       });
     } catch (error) {
-      console.error("[S3Adapter] uploadPartBytes失败:", error);
+      console.error("[StorageAdapter] uploadPartBytes失败:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * 单文件上传 - 使用 XMLHttpRequest 避免 CORS 问题
+   * 用于 PRESIGNED_SINGLE 策略,替代 Uppy 默认的 fetch API
+   * @param {Object} options {signature, body, onComplete, size, onProgress, signal}
+   * @returns {Promise<Object>} {ETag}
+   */
+  async uploadSingleFile({ signature, body, onComplete, size, onProgress, signal }) {
+    try {
+      const { url, headers } = signature;
+
+      if (!url) {
+        throw new Error("Cannot upload to an undefined URL");
+      }
+
+      console.log(`[StorageAdapter] uploadSingleFile 被调用: ${url}`);
+
+      return new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open("PUT", url, true);
+
+        // 设置请求头
+        if (headers) {
+          Object.keys(headers).forEach((key) => {
+            xhr.setRequestHeader(key, headers[key]);
+          });
+        }
+
+        xhr.responseType = "text";
+
+        // 处理取消信号
+        function onabort() {
+          xhr.abort();
+        }
+        function cleanup() {
+          if (signal) {
+            signal.removeEventListener("abort", onabort);
+          }
+        }
+        if (signal) {
+          signal.addEventListener("abort", onabort);
+        }
+
+        xhr.onabort = () => {
+          cleanup();
+          const err = new DOMException("The operation was aborted", "AbortError");
+          reject(err);
+        };
+
+        // 进度事件
+        const progressHandler = (evt) => {
+          try {
+            const loaded = evt?.loaded ?? 0;
+            const total = evt?.total ?? size;
+            onProgress?.({ loaded, total, lengthComputable: true });
+          } catch {}
+        };
+        xhr.upload.addEventListener("progress", progressHandler);
+
+        // 上传完成
+        xhr.addEventListener("load", (ev) => {
+          cleanup();
+          const target = ev.target;
+
+          if (target.status < 200 || target.status >= 300) {
+            const error = new Error(`HTTP ${target.status}: ${target.statusText}`);
+            error.source = target;
+            reject(error);
+            return;
+          }
+
+          try {
+            onProgress?.({ loaded: size, total: size, lengthComputable: true });
+          } catch {}
+
+          // 获取 ETag
+          const etag = target.getResponseHeader("ETag");
+          if (etag === null) {
+            // 即使读不到 ETag,也不报错,因为文件已经上传成功
+            // commit 阶段会由后端通过 HeadObject 获取 ETag
+            console.warn("[StorageAdapter] ⚠️ 无法读取 ETag (CORS),将由后端验证");
+            onComplete?.(null);
+            resolve({ ETag: null });
+            return;
+          }
+
+          console.log(`[StorageAdapter] ✅ 单文件上传成功 (ETag: ${etag})`);
+          onComplete?.(etag);
+          resolve({ ETag: etag });
+        });
+
+        // 上传失败
+        xhr.addEventListener("error", (ev) => {
+          cleanup();
+          const error = new Error("Upload failed");
+          error.source = ev.target;
+          reject(error);
+        });
+
+        xhr.send(body);
+      });
+    } catch (error) {
+      console.error("[StorageAdapter] uploadSingleFile 失败:", error);
       throw error;
     }
   }
@@ -1041,7 +1169,7 @@ export class S3Adapter {
    */
   async commitPresignedUpload(file, response) {
     try {
-      console.log(`[S3Adapter] 提交预签名上传完成: ${file.name}`);
+      console.log(`[StorageAdapter] 提交预签名上传完成: ${file.name}`);
 
       // 获取缓存的上传信息
       const uploadInfo = this.uploadSessions.get(file.id);
@@ -1058,9 +1186,9 @@ export class S3Adapter {
           targetPath: uploadInfo.targetPath,
           mountId: uploadInfo.mountId,
           fileId: uploadInfo.fileId,
-          s3Path: uploadInfo.s3Path,
-          s3Url: uploadInfo.s3Url,
-          s3ConfigId: uploadInfo.s3ConfigId,
+          storagePath: uploadInfo.storagePath,
+          publicUrl: uploadInfo.publicUrl,
+          storageConfigId: uploadInfo.storageConfigId,
           contentType: uploadInfo.contentType,
         },
         etag,
@@ -1075,10 +1203,10 @@ export class S3Adapter {
       // 清理上传会话
       this.uploadSessions.delete(file.id);
 
-      console.log(`[S3Adapter] 预签名上传commit成功: ${file.name}`);
+      console.log(`[StorageAdapter] 预签名上传commit成功: ${file.name}`);
       return commitResponse;
     } catch (error) {
-      console.error(`[S3Adapter] 预签名上传commit失败: ${file.name}`, error);
+      console.error(`[StorageAdapter] 预签名上传commit失败: ${file.name}`, error);
       throw error;
     }
   }
@@ -1090,7 +1218,7 @@ export class S3Adapter {
     this.uploadSessions.clear();
     // 清理所有localStorage中的分片缓存
     this.clearAllUploadedPartsFromStorage();
-    console.log(`[S3Adapter] 清理所有上传会话和localStorage分片缓存`);
+    console.log(`[StorageAdapter] 清理所有上传会话和localStorage分片缓存`);
   }
 
   /**
@@ -1106,18 +1234,18 @@ export class S3Adapter {
         }
       }
       keysToRemove.forEach((key) => localStorage.removeItem(key));
-      console.log(`[S3Adapter] 清理了${keysToRemove.length}个localStorage分片缓存`);
+      console.log(`[StorageAdapter] 清理了${keysToRemove.length}个localStorage分片缓存`);
     } catch (error) {
-      console.warn(`[S3Adapter] 清理localStorage失败:`, error);
+      console.warn(`[StorageAdapter] 清理localStorage失败:`, error);
     }
   }
 
   /**
-   * 从S3 Key构建完整的挂载点路径
-   * @param {string} s3Key S3的相对路径
+   * 从storage key构建完整的挂载点路径
+   * @param {string} storageKey 存储的相对路径
    * @returns {string} 完整的挂载点路径
    */
-  buildFullPathFromKey(s3Key) {
-    return this.pathResolver.buildFullPathFromKey(s3Key);
+  buildFullPathFromKey(storageKey) {
+    return this.pathResolver.buildFullPathFromKey(storageKey);
   }
 }

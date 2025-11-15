@@ -6,10 +6,10 @@
 
 import { lockManager } from "../utils/LockManager.js";
 import { parseLockXML, parseTimeoutHeader, parseDepthHeader, buildLockResponseXML, hasLockConflict } from "../utils/lockUtils.js";
-import { handleWebDAVError, createWebDAVErrorResponse } from "../utils/errorUtils.js";
+import { createWebDAVErrorResponse, withWebDAVErrorHandling } from "../utils/errorUtils.js";
 import { getStandardWebDAVHeaders } from "../utils/headerUtils.js";
-import { HTTPException } from "hono/http-exception";
-import { ApiStatus } from "../../constants/index.js";
+import { UserType } from "../../constants/index.js";
+import { AppError } from "../../http/errors.js";
 
 /**
  * 处理LOCK请求
@@ -21,7 +21,7 @@ import { ApiStatus } from "../../constants/index.js";
  * @returns {Response} HTTP响应
  */
 export async function handleLock(c, path, userId, userType, db) {
-  try {
+  return withWebDAVErrorHandling("LOCK", async () => {
     console.log(`WebDAV LOCK 请求 - 路径: ${path}, 用户类型: ${userType}`);
 
     // 获取请求头
@@ -35,9 +35,9 @@ export async function handleLock(c, path, userId, userType, db) {
 
     // 确定锁定所有者
     let owner = "unknown";
-    if (userType === "admin") {
+    if (userType === UserType.ADMIN) {
       owner = `admin:${userId}`;
-    } else if (userType === "apiKey" && typeof userId === "object") {
+    } else if (userType === UserType.API_KEY && typeof userId === "object") {
       owner = `apiKey:${userId.name || userId.id}`;
     }
 
@@ -85,8 +85,8 @@ export async function handleLock(c, path, userId, userType, db) {
       lockInfo = lockManager.createLock(path, lockRequest.owner || owner, timeoutSeconds, depth, lockRequest.scope, lockRequest.type);
     } catch (error) {
       console.error("创建锁定失败:", error);
-      if (error instanceof HTTPException) {
-        return createWebDAVErrorResponse(error.message, error.status);
+      if (error instanceof AppError) {
+        return createWebDAVErrorResponse(error.message, error.status ?? 500);
       }
       return createWebDAVErrorResponse("创建锁定失败", 500);
     }
@@ -106,10 +106,7 @@ export async function handleLock(c, path, userId, userType, db) {
         },
       }),
     });
-  } catch (error) {
-    console.error("处理LOCK失败:", error);
-    return handleWebDAVError("LOCK", error);
-  }
+  }, { includeDetails: false });
 }
 
 /**

@@ -5,9 +5,10 @@
 import { MountManager } from "../../storage/managers/MountManager.js";
 import { FileSystem } from "../../storage/fs/FileSystem.js";
 import { getEffectiveMimeType } from "../../utils/fileUtils.js";
-import { handleWebDAVError } from "../utils/errorUtils.js";
+import { withWebDAVErrorHandling } from "../utils/errorUtils.js";
 import { getStandardWebDAVHeaders } from "../utils/headerUtils.js";
-import { clearDirectoryCache } from "../../cache/index.js";
+import { getEncryptionSecret } from "../../utils/environmentUtils.js";
+import { ValidationError } from "../../http/errors.js";
 import { getSettingsByGroup } from "../../services/systemService.js";
 import { lockManager } from "../utils/LockManager.js";
 import { checkLockPermission } from "../utils/lockUtils.js";
@@ -59,15 +60,16 @@ function isReallyEmptyFile(contentLength, transferEncoding) {
  * @param {D1Database} db - D1数据库实例
  */
 export async function handlePut(c, path, userId, userType, db) {
-  try {
+  return withWebDAVErrorHandling("PUT", async () => {
     // 获取加密密钥
-    const encryptionSecret = c.env.ENCRYPTION_SECRET;
+    const encryptionSecret = getEncryptionSecret(c);
     if (!encryptionSecret) {
-      throw new Error("缺少加密密钥配置");
+      throw new ValidationError("缺少加密密钥配置");
     }
 
     // 创建挂载管理器和文件系统
-    const mountManager = new MountManager(db, encryptionSecret);
+    const repositoryFactory = c.get("repos");
+    const mountManager = new MountManager(db, encryptionSecret, repositoryFactory);
     const fileSystem = new FileSystem(mountManager);
 
     // 在PUT时自动创建父目录
@@ -117,7 +119,7 @@ export async function handlePut(c, path, userId, userType, db) {
     // 获取请求体流
     const bodyStream = c.req.body;
     if (!bodyStream) {
-      throw new Error("请求体为空");
+      throw new ValidationError("请求体为空");
     }
 
     const filename = path.split("/").pop();
@@ -135,12 +137,6 @@ export async function handlePut(c, path, userId, userType, db) {
       const result = await fileSystem.uploadFile(path, emptyFile, userId, userType, {
         useMultipart: false,
       });
-
-      // 清理缓存
-      const { mount } = await mountManager.getDriverByPath(path, userId, userType);
-      if (mount) {
-        await clearDirectoryCache({ mountId: mount.id });
-      }
 
       console.log(`WebDAV PUT - 空文件上传成功`);
 
@@ -230,8 +226,6 @@ export async function handlePut(c, path, userId, userType, db) {
         throw error;
       }
     }
-  } catch (error) {
-    console.error(`WebDAV PUT - 处理失败: ${error.message}`);
-    return handleWebDAVError(error, `PUT ${path}`);
-  }
+  }, { includeDetails: true });
 }
+

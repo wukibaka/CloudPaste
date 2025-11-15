@@ -1,4 +1,9 @@
 import { DbTables } from "../constants/index.js";
+
+// Legacy tables that only exist to support old migrations; drop once migrations are trimmed.
+const LegacyDbTables = {
+  S3_CONFIGS: "s3_configs",
+};
 import crypto from "crypto";
 
 // ==================== 表结构定义 ====================
@@ -112,35 +117,31 @@ async function createAdminTables(db) {
 async function createStorageTables(db) {
   console.log("创建存储相关表...");
 
-  // 创建s3_configs表 - 存储S3配置信息
+  // 创建 storage_configs
   await db
     .prepare(
       `
-      CREATE TABLE IF NOT EXISTS ${DbTables.S3_CONFIGS} (
+      CREATE TABLE IF NOT EXISTS ${DbTables.STORAGE_CONFIGS} (
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
-        provider_type TEXT NOT NULL,
-        endpoint_url TEXT NOT NULL,
-        bucket_name TEXT NOT NULL,
-        region TEXT,
-        access_key_id TEXT NOT NULL,
-        secret_access_key TEXT NOT NULL,
-        path_style BOOLEAN DEFAULT 0,
-        default_folder TEXT DEFAULT '',
-        is_public BOOLEAN DEFAULT 0,
-        is_default BOOLEAN DEFAULT 0,
-        total_storage_bytes BIGINT,
-        custom_host TEXT,
-        signature_expires_in INTEGER DEFAULT 3600,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        last_used DATETIME,
+        storage_type TEXT NOT NULL,
         admin_id TEXT,
-        FOREIGN KEY (admin_id) REFERENCES ${DbTables.ADMINS}(id) ON DELETE CASCADE
+        is_public INTEGER NOT NULL DEFAULT 0,
+        is_default INTEGER NOT NULL DEFAULT 0,
+        remark TEXT,
+        status TEXT NOT NULL DEFAULT 'ENABLED',
+        config_json TEXT NOT NULL,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        last_used DATETIME
       )
     `
     )
     .run();
+  await db.prepare(`CREATE INDEX IF NOT EXISTS idx_storage_admin ON ${DbTables.STORAGE_CONFIGS}(admin_id)`).run();
+  await db.prepare(`CREATE INDEX IF NOT EXISTS idx_storage_type ON ${DbTables.STORAGE_CONFIGS}(storage_type)`).run();
+  await db.prepare(`CREATE INDEX IF NOT EXISTS idx_storage_public ON ${DbTables.STORAGE_CONFIGS}(is_public)`).run();
+  await db.prepare(`CREATE UNIQUE INDEX IF NOT EXISTS idx_default_per_admin ON ${DbTables.STORAGE_CONFIGS}(admin_id) WHERE is_default = 1`).run();
 
   // 创建storage_mounts表 - 存储挂载配置
   await db
@@ -496,13 +497,13 @@ async function executeMigrationForVersion(db, version) {
 
     case 6:
       // 版本6：为S3_CONFIGS表添加自定义域名和签名时效相关字段
-      await addTableField(db, DbTables.S3_CONFIGS, "custom_host", "custom_host TEXT");
-      await addTableField(db, DbTables.S3_CONFIGS, "signature_expires_in", "signature_expires_in INTEGER DEFAULT 3600");
+      await addTableField(db, LegacyDbTables.S3_CONFIGS, "custom_host", "custom_host TEXT");
+      await addTableField(db, LegacyDbTables.S3_CONFIGS, "signature_expires_in", "signature_expires_in INTEGER DEFAULT 3600");
       break;
 
     case 7:
       // 版本7：尝试删除S3_CONFIGS表中的custom_host_signature字段
-      await removeTableField(db, DbTables.S3_CONFIGS, "custom_host_signature");
+      await removeTableField(db, LegacyDbTables.S3_CONFIGS, "custom_host_signature");
       break;
 
     case 8:
@@ -555,6 +556,85 @@ async function executeMigrationForVersion(db, version) {
     case 17:
       // 版本17：添加自定义头部和body设置
       await addCustomContentSettings(db);
+      break;
+
+    case 18:
+      // 版本18：创建 storage_configs 并从 s3_configs 迁移数据（单表+JSON 方案 A）
+      console.log("版本18：创建 storage_configs 表并迁移 s3_configs 数据...");
+      // 1) 创建表
+      await db
+        .prepare(
+          `
+          CREATE TABLE IF NOT EXISTS ${DbTables.STORAGE_CONFIGS} (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            storage_type TEXT NOT NULL,
+            admin_id TEXT,
+            is_public INTEGER NOT NULL DEFAULT 0,
+            is_default INTEGER NOT NULL DEFAULT 0,
+            remark TEXT,
+            status TEXT NOT NULL DEFAULT 'ENABLED',
+            config_json TEXT NOT NULL,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            last_used DATETIME
+          )
+        `
+        )
+        .run();
+      // 2) 索引与唯一约束（部分唯一索引）
+      await db.prepare(`CREATE INDEX IF NOT EXISTS idx_storage_admin ON ${DbTables.STORAGE_CONFIGS}(admin_id)`).run();
+      await db.prepare(`CREATE INDEX IF NOT EXISTS idx_storage_type ON ${DbTables.STORAGE_CONFIGS}(storage_type)`).run();
+      await db.prepare(`CREATE INDEX IF NOT EXISTS idx_storage_public ON ${DbTables.STORAGE_CONFIGS}(is_public)`).run();
+      await db
+        .prepare(
+          `CREATE UNIQUE INDEX IF NOT EXISTS idx_default_per_admin
+           ON ${DbTables.STORAGE_CONFIGS}(admin_id)
+           WHERE is_default = 1`
+        )
+        .run();
+      // 3) 迁移数据（仅一次）：将 s3_configs 映射为 storage_configs（config_json 使用 json_object 构造，密钥保持加密值）
+      //    仅当目标 id 不存在时插入，避免重复迁移
+      await db
+        .prepare(
+          `
+          INSERT OR IGNORE INTO ${DbTables.STORAGE_CONFIGS} (
+            id, name, storage_type, admin_id, is_public, is_default, remark, status,
+            config_json, created_at, updated_at, last_used
+          )
+          SELECT
+            s.id,
+            s.name,
+            'S3' AS storage_type,
+            s.admin_id,
+            COALESCE(s.is_public, 0),
+            COALESCE(s.is_default, 0),
+            NULL AS remark,
+            'ENABLED' AS status,
+            json_object(
+              'provider_type', s.provider_type,
+              'endpoint_url', s.endpoint_url,
+              'bucket_name', s.bucket_name,
+              'region', s.region,
+              'path_style', s.path_style,
+              'default_folder', s.default_folder,
+              'custom_host', s.custom_host,
+              'signature_expires_in', s.signature_expires_in,
+              'total_storage_bytes', s.total_storage_bytes,
+              'access_key_id', s.access_key_id,
+              'secret_access_key', s.secret_access_key
+            ) AS config_json,
+            s.created_at,
+            s.updated_at,
+            s.last_used
+          FROM ${LegacyDbTables.S3_CONFIGS} s
+          WHERE NOT EXISTS (
+            SELECT 1 FROM ${DbTables.STORAGE_CONFIGS} t WHERE t.id = s.id
+          )
+        `
+        )
+        .run();
+      console.log("版本18：storage_configs 表与数据迁移完成。");
       break;
 
     default:
@@ -1163,7 +1243,7 @@ export async function checkAndInitDatabase(db) {
       DbTables.ADMINS,
       DbTables.ADMIN_TOKENS,
       DbTables.API_KEYS,
-      DbTables.S3_CONFIGS,
+      DbTables.STORAGE_CONFIGS,
       DbTables.FILES,
       DbTables.FILE_PASSWORDS,
       DbTables.SYSTEM_SETTINGS,
@@ -1188,7 +1268,7 @@ export async function checkAndInitDatabase(db) {
     const versionSetting = await db.prepare(`SELECT value FROM ${DbTables.SYSTEM_SETTINGS} WHERE key = 'schema_version'`).first();
 
     const currentVersion = versionSetting ? parseInt(versionSetting.value) : 0;
-    const targetVersion = 17; // 当前最新版本
+    const targetVersion = 18; // 当前最新版本
 
     if (currentVersion < targetVersion) {
       console.log(`需要更新数据库结构，当前版本:${currentVersion}，目标版本:${targetVersion}`);

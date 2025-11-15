@@ -5,10 +5,10 @@
 import { S3Client, PutObjectCommand, GetObjectCommand, ListObjectsV2Command, DeleteObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { ConfiguredRetryStrategy } from "@smithy/util-retry";
-import { decryptValue } from "./crypto.js";
-import { S3ProviderTypes } from "../constants/index.js";
-import { getEffectiveMimeType, getContentTypeAndDisposition } from "./fileUtils.js";
-
+import { decryptValue } from "../../../../utils/crypto.js";
+import { S3ProviderTypes } from "../../../../constants/index.js";
+import { getEffectiveMimeType, getContentTypeAndDisposition } from "../../../../utils/fileUtils.js";
+import { ValidationError, S3DriverError } from "../../../../http/errors.js";
 /**
  * 创建S3客户端
  * @param {Object} config - S3配置对象
@@ -19,6 +19,10 @@ export async function createS3Client(config, encryptionSecret) {
   // 解密敏感配置
   const accessKeyId = await decryptValue(config.access_key_id, encryptionSecret);
   const secretAccessKey = await decryptValue(config.secret_access_key, encryptionSecret);
+
+  if (!accessKeyId || !secretAccessKey) {
+    throw new ValidationError("S3凭据缺失：access_key_id 或 secret_access_key 为空或不可用");
+  }
 
   // 创建S3客户端配置
   const clientConfig = {
@@ -91,9 +95,10 @@ export async function createS3Client(config, encryptionSecret) {
   clientConfig.retryStrategy = new ConfiguredRetryStrategy(maxRetries, retryBackoffStrategy);
 
   // 日志记录所选服务商和配置
+  const resolvedPathStyle = clientConfig.forcePathStyle === true;
   console.log(
     `正在创建S3客户端 (${config.provider_type}), endpoint: ${config.endpoint_url}, region: ${config.region || "auto"}, pathStyle: ${
-      config.path_style ? "是" : "否"
+      resolvedPathStyle ? "是" : "否"
     }, maxRetries: ${maxRetries}, checksumMode: ${clientConfig.requestChecksumCalculation || "默认"}`
   );
 
@@ -191,7 +196,18 @@ export async function generatePresignedPutUrl(s3Config, storagePath, mimetype, e
     return url;
   } catch (error) {
     console.error("生成上传预签名URL出错:", error);
-    throw new Error("无法生成文件上传链接: " + (error.message || "未知错误"));
+    throw new S3DriverError("无法生成文件上传链接", {
+      details: {
+        op: "presignPut",
+        provider: s3Config?.provider_type,
+        bucket: s3Config?.bucket_name,
+        key: normalizedPath,
+        region: s3Config?.region,
+        endpoint: s3Config?.endpoint_url,
+        expiresIn: finalExpiresIn,
+        cause: error?.message,
+      },
+    });
   }
 }
 
@@ -276,7 +292,21 @@ async function generateOriginalPresignedUrl(s3Config, storagePath, encryptionSec
     return url;
   } catch (error) {
     console.error("生成预签名URL出错:", error);
-    throw new Error("无法生成文件下载链接: " + (error.message || "未知错误"));
+    // 注意：此函数内变量名存在：s3Client/command/expiresIn/mimetype/forceDownload 等
+    throw new S3DriverError("无法生成文件下载链接", {
+      details: {
+        op: "presignGet",
+        provider: s3Config?.provider_type,
+        bucket: s3Config?.bucket_name,
+        key: normalizedPath,
+        region: s3Config?.region,
+        endpoint: s3Config?.endpoint_url,
+        expiresIn: finalExpiresIn,
+        forceDownload: !!forceDownload,
+        contentType: mimetype || null,
+        cause: error?.message,
+      },
+    });
   }
 }
 
@@ -300,12 +330,12 @@ export async function generatePresignedUrl(s3Config, storagePath, encryptionSecr
 
   if (enableCache && userType && userId) {
     // 动态导入缓存管理器，避免循环依赖
-    const { s3UrlCacheManager } = await import("../cache/S3UrlCache.js");
+    const { urlCacheManager } = await import("../../../../cache/UrlCache.js");
 
     // 尝试从缓存获取
-    const cachedUrl = s3UrlCacheManager.get(s3Config.id, storagePath, forceDownload, userType, userId);
+    const cachedUrl = urlCacheManager.get(s3Config.id, storagePath, forceDownload, userType, userId);
     if (cachedUrl) {
-      console.log(`🎯 S3URL缓存命中: ${storagePath}`);
+      console.log(`🎯 URL缓存命中: ${storagePath}`);
       return cachedUrl;
     }
   }
@@ -342,9 +372,9 @@ export async function generatePresignedUrl(s3Config, storagePath, encryptionSecr
 
   // 缓存生成的URL
   if (enableCache && userType && userId && generatedUrl) {
-    const { s3UrlCacheManager } = await import("../cache/S3UrlCache.js");
-    s3UrlCacheManager.set(s3Config.id, storagePath, forceDownload, userType, userId, generatedUrl, s3Config);
-    console.log(`💾 S3URL已缓存: ${storagePath}`);
+    const { urlCacheManager } = await import("../../../../cache/UrlCache.js");
+    urlCacheManager.set(s3Config.id, storagePath, forceDownload, userType, userId, generatedUrl, s3Config);
+    console.log(`💾 URL已缓存: ${storagePath}`);
   }
 
   return generatedUrl;
@@ -514,7 +544,7 @@ export async function getDirectoryPresignedUrls(s3Client, sourceS3Config, target
         const fileName = pathParts.pop();
 
         // 统一从文件名推断MIME类型，不依赖源文件的MIME类型
-        const { getEffectiveMimeType } = await import("../utils/fileUtils.js");
+        const { getEffectiveMimeType } = await import("../../../../utils/fileUtils.js");
         contentType = getEffectiveMimeType(null, fileName);
         console.log(`目录复制：从文件名[${fileName}]推断MIME类型: ${contentType}`);
 

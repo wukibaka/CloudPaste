@@ -9,7 +9,7 @@ export default defineConfig(({ command, mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
 
   // 统一版本管理
-  const APP_VERSION = "0.8.1";
+  const APP_VERSION = "0.8.6";
   const isDev = command === "serve";
 
   // 打印环境变量，帮助调试
@@ -22,6 +22,7 @@ export default defineConfig(({ command, mode }) => {
   });
 
   return {
+    base: '/',
     define: {
       // 注入版本号到应用中
       __APP_VERSION__: JSON.stringify(APP_VERSION),
@@ -443,6 +444,7 @@ export default defineConfig(({ command, mode }) => {
       // 移除vditor排除配置，因为现在从本地dist目录加载
     },
     build: {
+      outDir: 'dist', // 显式指定输出目录
       minify: "terser",
       terserOptions: {
         compress: {
